@@ -1,0 +1,54 @@
+# Production-style stack: PostgreSQL, the FastAPI backend, and nginx serving the Vue app and proxying /api.
+#   cp .env.example .env     (then edit the secrets)
+#   docker compose up -d --build
+#   docker compose exec backend python -m scripts.create_user lead 'a long password' --name "Your Name"
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: turnaround
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: turnaround
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U turnaround -d turnaround"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      ENV: production
+      DATABASE_URL: postgresql+psycopg://turnaround:${POSTGRES_PASSWORD}@db:5432/turnaround
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+      FLIGHT_API_KEY: ${FLIGHT_API_KEY:-}
+      AIRPORT_ICAO: ${AIRPORT_ICAO:-YPAD}
+      AIRPORT_TZ: ${AIRPORT_TZ:-Australia/Adelaide}
+      FLIGHT_AIRLINES: ${FLIGHT_AIRLINES:-JQ,VA}
+      FLIGHT_INTERNATIONAL: ${FLIGHT_INTERNATIONAL:-true}
+      FLIGHT_FILTER_MODE: ${FLIGHT_FILTER_MODE:-any}
+      MORNING_WINDOW: ${MORNING_WINDOW:-06:00-13:00}
+      NIGHT_WINDOW: ${NIGHT_WINDOW:-13:00-06:00}
+      FLIGHT_MAX_PAGES: ${FLIGHT_MAX_PAGES:-3}
+      FLIGHT_INCLUDE_ARRIVED: ${FLIGHT_INCLUDE_ARRIVED:-true}
+      FLIGHT_SYNC_MIN_INTERVAL_SECONDS: ${FLIGHT_SYNC_MIN_INTERVAL_SECONDS:-300}
+      FLIGHT_MONTHLY_CALL_LIMIT: ${FLIGHT_MONTHLY_CALL_LIMIT:-100}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+    depends_on:
+      - backend
+
+volumes:
+  dbdata:

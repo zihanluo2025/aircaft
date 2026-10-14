@@ -1,0 +1,220 @@
+from datetime import date
+
+from fastapi.testclient import TestClient
+
+from app.main import app
+from app.models import Assignment, Flight
+from app.services.domain import DEFAULT_ROLES
+
+DAY = "2026-10-13"
+Q = {"date": DAY, "shift": "morning"}
+
+
+def seed_team(client):
+    text = "Name,2026-10-13\nAlex K,All day\nPriya S,Early\nTom W,Late\n"
+    response = client.post("/api/roster/import", json={"shift": "morning", "text": text})
+    assert response.status_code == 200, response.text
+    staff = client.get("/api/staff", params={"team": "morning"}).json()
+    return {s["name"]: s["id"] for s in staff}
+
+
+def new_flight(client, number="QF 705", sched="05:50"):
+    """Flights only ever come from the provider sync, so there is no create endpoint to hit here -
+    go straight to the database, the same way the sync job does, and read the result back through the API."""
+    with client.db_session_factory() as db:
+        flight = Flight(work_date=date.fromisoformat(DAY), shift="morning", flight_no=number, sched=sched, eta=sched)
+        flight.assignments = [Assignment(role=role, position=i) for i, role in enumerate(DEFAULT_ROLES)]
+        db.add(flight)
+        db.commit()
+        flight_id = flight.id
+    response = client.get(f"/api/flights/{flight_id}")
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_health_is_public(client):
+    assert TestClient(app).get("/api/health").json() == {"status": "ok"}
+
+
+def test_auth_required(client):
+    assert TestClient(app).get("/api/staff").status_code == 401
+
+
+def test_login_rejects_wrong_password(client):
+    response = TestClient(app).post("/api/auth/login", json={"username": "lead", "password": "nope"})
+    assert response.status_code == 401
+
+
+def test_staff_crud(client):
+    created = client.post("/api/staff", json={"name": "Sam R", "team": "night", "quals": ["Truck"]})
+    assert created.status_code == 201
+    staff_id = created.json()["id"]
+    assert client.post("/api/staff", json={"name": "Sam R", "team": "night"}).status_code == 409
+    assert client.patch(f"/api/staff/{staff_id}", json={"quals": ["Driver", "Truck"]}).json()["quals"] == [
+        "Driver",
+        "Truck",
+    ]
+    assert client.get("/api/staff", params={"team": "morning"}).json() == []
+    assert len(client.get("/api/staff", params={"team": "night"}).json()) == 1
+    assert client.delete(f"/api/staff/{staff_id}").status_code == 204
+    assert client.get("/api/staff", params={"team": "night"}).json() == []
+
+
+def test_import_creates_plan_and_changes_show_in_report(client):
+    ids = seed_team(client)
+    roster = client.get("/api/roster", params=Q).json()
+    assert roster["has_plan"] is True
+    assert [e["name"] for e in roster["entries"]] == ["Priya S", "Tom W", "Alex K"]  # early, late, all day
+
+    changed = client.patch(f"/api/roster/{ids['Tom W']}", params=Q, json={"shift_type": "all"})
+    assert changed.status_code == 200
+    assert changed.json()["entry"]["planned_type"] == "late"
+
+    report = client.get("/api/report", params=Q).json()
+    assert report["roster_changes"] == ["Tom W (Late to All day)"]
+
+
+def test_role_needs_qualification(client):
+    ids = seed_team(client)
+    url = f"/api/roster/{ids['Alex K']}"
+    assert client.patch(url, params=Q, json={"role": "Driver"}).status_code == 400
+    client.patch(f"/api/staff/{ids['Alex K']}", json={"quals": ["Driver"]})
+    assert client.patch(url, params=Q, json={"role": "Driver"}).json()["entry"]["role"] == "Driver"
+    assert client.patch(f"/api/roster/{ids['Priya S']}", params=Q, json={"role": "Toilet"}).status_code == 200
+
+
+def test_flight_lifecycle(client):
+    ids = seed_team(client)
+    client.patch(f"/api/staff/{ids['Alex K']}", json={"quals": ["Driver"]})
+    client.patch(f"/api/roster/{ids['Alex K']}", params=Q, json={"role": "Driver"})
+    flight = new_flight(client)
+    assert flight["status"] == "sched"
+    assert len(flight["assignments"]) == 5
+
+    # the Driver fixed role counts as crew, so cleaning can start
+    started = client.post(f"/api/flights/{flight['id']}/start")
+    assert started.status_code == 200
+    assert started.json()["status"] == "cleaning"
+    assert [c["staff_name"] for c in started.json()["fixed"]] == ["Alex K"]
+    assert client.post(f"/api/flights/{flight['id']}/start").status_code == 409
+
+    finished = client.post(f"/api/flights/{flight['id']}/finish").json()
+    assert finished["status"] == "done"
+    assert finished["minutes"] is not None
+
+    signed = client.put(
+        f"/api/flights/{flight['id']}/signature", json={"name": "Jo", "image": "data:image/png;base64,AAAA"}
+    )
+    assert signed.status_code == 200
+    assert signed.json()["has_signature"] is True
+
+    report = client.get("/api/report", params=Q).json()
+    assert report["done"] == 1
+    assert report["signed"] == 1
+    assert "Signed by Jo" in report["summary_text"]
+
+
+def test_start_needs_crew(client):
+    flight = new_flight(client)
+    response = client.post(f"/api/flights/{flight['id']}/start")
+    assert response.status_code == 400
+
+
+def test_signature_needs_finished_flight(client):
+    flight = new_flight(client)
+    response = client.put(
+        f"/api/flights/{flight['id']}/signature", json={"name": "Jo", "image": "data:image/png;base64,AAAA"}
+    )
+    assert response.status_code == 400
+
+
+def test_cannot_double_book_a_cleaner(client):
+    ids = seed_team(client)
+    first, second = new_flight(client, "QF 705", "05:50"), new_flight(client, "VA 1252", "06:25")
+    job = [{"role": "Vacuum", "staff_id": ids["Priya S"]}]
+    assert client.put(f"/api/flights/{first['id']}/assignments", json=job).status_code == 200
+    assert client.post(f"/api/flights/{first['id']}/start").status_code == 200
+    clash = client.put(f"/api/flights/{second['id']}/assignments", json=job)
+    assert clash.status_code == 409
+    assert "Priya S" in clash.json()["detail"]
+
+
+def test_only_people_on_duty_can_be_assigned(client):
+    ids = seed_team(client)
+    flight = new_flight(client)
+    client.patch(f"/api/roster/{ids['Tom W']}", params=Q, json={"shift_type": None})
+    response = client.put(
+        f"/api/flights/{flight['id']}/assignments", json=[{"role": "Vacuum", "staff_id": ids["Tom W"]}]
+    )
+    assert response.status_code == 400
+
+
+def test_taking_someone_off_clears_their_jobs(client):
+    ids = seed_team(client)
+    flight = new_flight(client)
+    client.put(f"/api/flights/{flight['id']}/assignments", json=[{"role": "Vacuum", "staff_id": ids["Priya S"]}])
+    off = client.patch(f"/api/roster/{ids['Priya S']}", params=Q, json={"shift_type": None}).json()
+    assert off["unassigned"] == 1
+    detail = client.get(f"/api/flights/{flight['id']}").json()
+    assert detail["assignments"][0]["staff_id"] is None
+
+
+def test_call_in_is_tagged_and_reported(client):
+    ids = seed_team(client)
+    client.patch(f"/api/roster/{ids['Tom W']}", params=Q, json={"shift_type": None})
+    back = client.patch(f"/api/roster/{ids['Tom W']}", params=Q, json={"shift_type": "early", "called_in": True})
+    assert back.json()["entry"]["called_in_at"] is not None
+    assert client.get("/api/report", params=Q).json()["called_in"] == ["Tom W"]
+
+
+def test_shifts_are_separate(client):
+    seed_team(client)
+    night = client.get("/api/roster", params={"date": DAY, "shift": "night"}).json()
+    assert night["entries"] == []
+    assert client.get("/api/staff", params={"team": "night"}).json() == []
+
+
+def test_roster_import_from_xlsx_file(client):
+    from datetime import date as _date, time as _time
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws["A1"] = "ADL - PM SHIFT - Week ending Sun 18 Oct 2026"
+    ws.merge_cells("A1:D1")
+    ws["A2"] = "Employee"
+    ws["B2"] = _date(2026, 10, 13)
+    ws.merge_cells("B2:C2")
+    ws["D2"] = "note"
+    ws["B3"], ws["C3"] = "Start", "End"
+    ws["A4"] = "Alex K"
+    ws["B4"], ws["C4"] = _time(15, 50), _time(22, 15)
+    ws["D4"] = "Truck driver"
+    buf = BytesIO()
+    wb.save(buf)
+
+    files = {"file": ("roster.xlsx", buf.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+    preview = client.post("/api/roster/import/preview/file", data={"shift": "morning"}, files=files)
+    assert preview.status_code == 200, preview.text
+    assert preview.json() == {"days": 1, "people": 1, "new_people": 1, "shifts": 1, "bad": []}
+
+    buf.seek(0)
+    files = {"file": ("roster.xlsx", buf.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+    applied = client.post("/api/roster/import/file", data={"shift": "morning"}, files=files)
+    assert applied.status_code == 200, applied.text
+    assert applied.json() == {"days": 1, "created_staff": 1, "shifts": 1}
+
+    roster = client.get("/api/roster", params={"date": DAY, "shift": "morning"}).json()
+    entry = roster["entries"][0]
+    assert entry["name"] == "Alex K"
+    assert entry["rstart"] == "15:50"
+    assert entry["rend"] == "22:15"
+    assert sorted(entry["quals"]) == ["Driver", "Truck"]
+
+
+def test_roster_import_file_rejects_non_xlsx(client):
+    files = {"file": ("roster.csv", b"Name,13/10/2026\nAlex K,Early\n", "text/csv")}
+    response = client.post("/api/roster/import/preview/file", data={"shift": "morning"}, files=files)
+    assert response.status_code == 400
