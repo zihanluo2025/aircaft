@@ -19,13 +19,15 @@ function messageFrom(data) {
   return ''
 }
 
-async function request(method, path, { params, body } = {}) {
+async function request(method, path, { params, body, form } = {}) {
   const query = params
     ? new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null)).toString()
     : ''
   const headers = {}
   const token = getToken()
   if (token) headers.Authorization = `Bearer ${token}`
+  // form (FormData, for a file upload) sets its own multipart Content-Type with boundary; a plain
+  // body is sent as JSON.
   if (body !== undefined) headers['Content-Type'] = 'application/json'
 
   let response
@@ -33,7 +35,7 @@ async function request(method, path, { params, body } = {}) {
     response = await fetch(`/api${path}${query ? `?${query}` : ''}`, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: form !== undefined ? form : body === undefined ? undefined : JSON.stringify(body),
     })
   } catch {
     throw Object.assign(new Error('Cannot reach the server. Check your connection.'), { status: 0 })
@@ -60,6 +62,13 @@ const post = (path, body, params) => request('POST', path, { body, params })
 const patch = (path, body, params) => request('PATCH', path, { body, params })
 const put = (path, body, params) => request('PUT', path, { body, params })
 const del = (path) => request('DELETE', path)
+const postFile = (path, form) => request('POST', path, { form })
+function fileForm(shift, file) {
+  const form = new FormData()
+  form.append('shift', shift)
+  form.append('file', file)
+  return form
+}
 
 export const api = {
   login: (username, password) => post('/auth/login', { username, password }),
@@ -75,6 +84,8 @@ export const api = {
     patch: (staffId, date, shift, body) => patch(`/roster/${staffId}`, body, { date, shift }),
     importPreview: (shift, text) => post('/roster/import/preview', { shift, text }),
     importApply: (shift, text) => post('/roster/import', { shift, text }),
+    importPreviewFile: (shift, file) => postFile('/roster/import/preview/file', fileForm(shift, file)),
+    importApplyFile: (shift, file) => postFile('/roster/import/file', fileForm(shift, file)),
   },
   flights: {
     list: (date, shift) => get('/flights', { date, shift }),

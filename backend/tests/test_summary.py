@@ -31,7 +31,7 @@ def test_summary_text():
     assert "Roster changes: Tom W (Early to All day)" in lines
     assert "QF 705 | ETA 05:50 | Done | 38 min" in lines
     assert "  Crew: Alex K (Driver), Mei L (Business)" in lines
-    assert "  Signed by Jo" in lines
+    assert "  Signed" in lines
     assert "  Notes: Spill row 12" in lines
     assert "VA 1252 | ETA 06:40 | Scheduled" in lines
     assert "  Crew: no crew recorded" in lines

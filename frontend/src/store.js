@@ -207,6 +207,21 @@ export const actions = {
     }
     return result
   },
+  async importPreviewFile(file) {
+    try {
+      return await api.roster.importPreviewFile(state.shift, file)
+    } catch (error) {
+      toast(error.message)
+      return undefined
+    }
+  },
+  async importApplyFile(file) {
+    const result = await run(() => api.roster.importApplyFile(state.shift, file))
+    if (result && result.days) {
+      toast(`Imported ${result.days} day${result.days > 1 ? 's' : ''}` + (result.created_staff ? `, ${result.created_staff} new people` : ''))
+    }
+    return result
+  },
   addStaff: (body) => run(() => api.staff.create(body), `${body.name} added to team`),
   patchStaff: (id, body) => run(() => api.staff.patch(id, body)),
   removeStaff: (id) => run(() => api.staff.remove(id), 'Removed from team'),

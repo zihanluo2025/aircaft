@@ -109,16 +109,19 @@ def parse_time(value: str) -> Optional[str]:
 
 def derive_shift_type(rstart: str, rend: str, window: tuple[str, str]) -> str:
     """Best-effort Early/Late/All day label for an actual Start/Indicative End, relative to the
-    shift's configured window. Covers most of the window -> all day; starts in the window's first
-    half -> early; otherwise late. Handles the entry and/or the window crossing midnight."""
+    shift's configured window. Calibrated against this employer's two real shift patterns within a
+    13:00-06:00 (17h) window -- Early 15:50-22:15 (starts ~17% in, runs ~38%), Late 19:50-23:55
+    (starts ~40% in, runs ~24%), All day 15:50-23:55 (runs ~48%) -- rather than splitting the window
+    down the literal middle, which puts both real start times in the first half and mislabels Late
+    as Early. Handles the entry and/or the window crossing midnight."""
     start, end = to_minutes(rstart), to_minutes(rend)
     w_start, w_end = to_minutes(window[0]), to_minutes(window[1])
     duration = (end - start) % 1440
     window_len = (w_end - w_start) % 1440 or 1440
-    if duration >= window_len * 0.8:
+    if duration >= window_len * 0.45:
         return "all"
     offset = (start - w_start) % 1440
-    return "early" if offset <= window_len / 2 else "late"
+    return "early" if offset <= window_len * 0.28 else "late"
 
 
 def _split_row(line: str) -> list[str]:
@@ -164,44 +167,82 @@ def _is_endish(text: str) -> bool:
     return "end" in text or "finish" in text
 
 
+_TRAILING_START = re.compile(r"\s*start\s*$", re.IGNORECASE)
+
+
+def _find_single_row_pairs(head: list[str], today: Optional[date]) -> list[tuple[str, int, int]]:
+    """The employer's actual .xlsx has one header row, each date and "Start" combined into one cell
+    ("Mon 12/10 Start") immediately followed by a plain "End" cell -- no separate sub-header row."""
+    pairs: list[tuple[str, int, int]] = []
+    i = 1
+    while i + 1 < len(head):
+        cell = head[i].strip()
+        if _is_startish(cell):
+            day = parse_date(_TRAILING_START.sub("", cell), today)
+            if day and _is_endish(_cell(head, i + 1)):
+                pairs.append((day, i, i + 1))
+                i += 2
+                continue
+        break
+    return pairs
+
+
+def _find_two_row_pairs(head: list[str], sub: list[str], today: Optional[date]) -> list[tuple[str, int, int]]:
+    """A date row (the date only needed on the first column of a pair -- a merged cell's paste often
+    leaves the second blank) over a separate Start/Indicative End sub-header row."""
+    pairs: list[tuple[str, int, int]] = []
+    last_date_cell = ""
+    i = 1
+    while i < len(head):
+        if head[i].strip():
+            last_date_cell = head[i]
+        day = parse_date(last_date_cell, today)
+        if day and _is_startish(_cell(sub, i)) and _is_endish(_cell(sub, i + 1)):
+            pairs.append((day, i, i + 1))
+            i += 2
+            continue
+        break
+    return pairs
+
+
+def _licence_columns(head: list[str], start: int) -> tuple[list[tuple[int, str]], list[int]]:
+    """Either a dedicated Driver Licence / Truck Licence column each (a non-blank cell means held),
+    or a single free-text note column (e.g. "driver", "Truck driver") scanned for those words -- the
+    real export from this employer uses the latter."""
+    lic_cols: list[tuple[int, str]] = []
+    note_cols: list[int] = []
+    for j in range(start, len(head)):
+        name = head[j].strip().lower()
+        if "note" in name:
+            note_cols.append(j)
+        elif re.search(r"driver", name):
+            lic_cols.append((j, "Driver"))
+        elif re.search(r"truck", name):
+            lic_cols.append((j, "Truck"))
+    return lic_cols, note_cols
+
+
 _MAX_TITLE_ROWS = 3  # how many leading rows (e.g. a merged "ADL - PM SHIFT - Week ending..." banner) to skip
 
 
 def _detect_paired_header(rows: list[list[str]], today: Optional[date]):
-    """Scan the first few rows for a date row (over a Start/Indicative End sub-header row the line
-    below it), skipping past an optional title banner above it. Returns the date pairs
-    (date, start_col, end_col), any trailing Driver/Truck licence columns, any note columns, and the
-    row index the person data starts at -- or None if nothing matches."""
-    for header_row in range(0, min(_MAX_TITLE_ROWS, len(rows) - 2) + 1):
-        head, sub = rows[header_row], rows[header_row + 1]
-        pairs: list[tuple[str, int, int]] = []
-        last_date_cell = ""
-        i = 1
-        while i < len(head):
-            if head[i].strip():
-                last_date_cell = head[i]
-            day = parse_date(last_date_cell, today)
-            if day and _is_startish(_cell(sub, i)) and _is_endish(_cell(sub, i + 1)):
-                pairs.append((day, i, i + 1))
-                i += 2
-                continue
-            break
+    """Scan the first few rows for a paired Start/End header, skipping past an optional title banner
+    above it. Tries the single-header-row style first (see _find_single_row_pairs), then the
+    two-header-row style (see _find_two_row_pairs). Returns the date pairs (date, start_col, end_col),
+    any trailing Driver/Truck licence columns, any note columns, and the row index the person data
+    starts at -- or None if nothing matches."""
+    for header_row in range(0, min(_MAX_TITLE_ROWS, len(rows) - 1) + 1):
+        head = rows[header_row]
+        pairs = _find_single_row_pairs(head, today)
+        data_start = header_row + 1
+        if not pairs and header_row + 1 < len(rows):
+            pairs = _find_two_row_pairs(head, rows[header_row + 1], today)
+            data_start = header_row + 2
         if not pairs:
             continue
-        # Either a dedicated Driver Licence / Truck Licence column each (a non-blank cell means
-        # held), or a single free-text note column (e.g. "driver", "Truck driver") scanned for those
-        # words -- the real export from this employer uses the latter.
-        lic_cols: list[tuple[int, str]] = []
-        note_cols: list[int] = []
-        for j in range(i, len(head)):
-            name = head[j].strip().lower()
-            if "note" in name:
-                note_cols.append(j)
-            elif re.search(r"driver", name):
-                lic_cols.append((j, "Driver"))
-            elif re.search(r"truck", name):
-                lic_cols.append((j, "Truck"))
-        return pairs, lic_cols, note_cols, header_row + 2
+        end_col = pairs[-1][2]
+        lic_cols, note_cols = _licence_columns(head, end_col + 1)
+        return pairs, lic_cols, note_cols, data_start
     return None
 
 

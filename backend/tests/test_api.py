@@ -83,13 +83,21 @@ def test_role_needs_qualification(client):
     assert client.patch(f"/api/roster/{ids['Priya S']}", params=Q, json={"role": "Toilet"}).status_code == 200
 
 
+def test_truck_role_does_not_need_the_licence(client):
+    # Truck duty also covers just helping load/unload, so unlike Driver, anyone on duty can take it.
+    ids = seed_team(client)
+    unqualified = client.patch(f"/api/roster/{ids['Priya S']}", params=Q, json={"role": "Truck"})
+    assert unqualified.status_code == 200
+    assert unqualified.json()["entry"]["role"] == "Truck"
+
+
 def test_flight_lifecycle(client):
     ids = seed_team(client)
     client.patch(f"/api/staff/{ids['Alex K']}", json={"quals": ["Driver"]})
     client.patch(f"/api/roster/{ids['Alex K']}", params=Q, json={"role": "Driver"})
     flight = new_flight(client)
     assert flight["status"] == "sched"
-    assert len(flight["assignments"]) == 5
+    assert len(flight["assignments"]) == len(DEFAULT_ROLES)
 
     # the Driver fixed role counts as crew, so cleaning can start
     started = client.post(f"/api/flights/{flight['id']}/start")
@@ -103,7 +111,7 @@ def test_flight_lifecycle(client):
     assert finished["minutes"] is not None
 
     signed = client.put(
-        f"/api/flights/{flight['id']}/signature", json={"name": "Jo", "image": "data:image/png;base64,AAAA"}
+        f"/api/flights/{flight['id']}/signature", json={"name": flight["flight_no"], "image": "data:image/png;base64,AAAA"}
     )
     assert signed.status_code == 200
     assert signed.json()["has_signature"] is True
@@ -111,7 +119,7 @@ def test_flight_lifecycle(client):
     report = client.get("/api/report", params=Q).json()
     assert report["done"] == 1
     assert report["signed"] == 1
-    assert "Signed by Jo" in report["summary_text"]
+    assert "  Signed\n" in report["summary_text"]
 
 
 def test_start_needs_crew(client):
@@ -218,3 +226,58 @@ def test_roster_import_file_rejects_non_xlsx(client):
     files = {"file": ("roster.csv", b"Name,13/10/2026\nAlex K,Early\n", "text/csv")}
     response = client.post("/api/roster/import/preview/file", data={"shift": "morning"}, files=files)
     assert response.status_code == 400
+
+
+def test_calling_someone_sick_clears_their_jobs_and_tags_them(client):
+    ids = seed_team(client)
+    flight = new_flight(client)
+    client.put(f"/api/flights/{flight['id']}/assignments", json=[{"role": "Vacuum", "staff_id": ids["Priya S"]}])
+
+    sick = client.patch(f"/api/roster/{ids['Priya S']}", params=Q, json={"sick": True})
+    assert sick.status_code == 200, sick.text
+    body = sick.json()
+    assert body["unassigned"] == 1
+    assert body["entry"]["sick_at"] is not None
+    assert body["entry"]["shift_type"] is None
+    detail = client.get(f"/api/flights/{flight['id']}").json()
+    assert detail["assignments"][0]["staff_id"] is None
+
+    # giving them a shift again implicitly undoes the sick call
+    back = client.patch(f"/api/roster/{ids['Priya S']}", params=Q, json={"shift_type": "early"}).json()
+    assert back["entry"]["sick_at"] is None
+    assert back["entry"]["shift_type"] == "early"
+
+
+def test_undo_sick(client):
+    ids = seed_team(client)
+    client.patch(f"/api/roster/{ids['Priya S']}", params=Q, json={"sick": True})
+    undo = client.patch(f"/api/roster/{ids['Priya S']}", params=Q, json={"sick": False}).json()
+    assert undo["entry"]["sick_at"] is None
+
+
+def test_report_staff_count_only_counts_people_actually_on_that_flight(client):
+    # Driver/Toilet/Truck are day-wide, not per-flight -- before a flight has even started cleaning,
+    # the report's Staff count should not borrow today's current fixed-role holders and show the same
+    # number on every unstarted flight.
+    ids = seed_team(client)
+    client.patch(f"/api/staff/{ids['Alex K']}", json={"quals": ["Driver"]})
+    client.patch(f"/api/roster/{ids['Alex K']}", params=Q, json={"role": "Driver"})
+    flight = new_flight(client)
+
+    report = client.get("/api/report", params=Q).json()
+    assert report["flights"][0]["crew_count"] == 0
+
+    client.post(f"/api/flights/{flight['id']}/start")
+    report = client.get("/api/report", params=Q).json()
+    assert report["flights"][0]["crew_count"] == 1  # Alex K's Driver snapshot, now locked in
+
+
+def test_names_are_shown_in_title_case(client):
+    # Imported rosters come through in ALL CAPS; the API should hand back names the way a person
+    # would write them, without changing what is actually stored.
+    text = "Name,2026-10-13\nJOHN O'CONNOR,All day\n"
+    client.post("/api/roster/import", json={"shift": "morning", "text": text})
+    roster = client.get("/api/roster", params=Q).json()
+    assert roster["entries"][0]["name"] == "John O'connor"
+    staff = client.get("/api/staff", params={"team": "morning"}).json()
+    assert staff[0]["name"] == "John O'connor"

@@ -18,7 +18,7 @@ from ..schemas import (
     SignatureIn,
     TimesIn,
 )
-from ..services.domain import build_flight_out, fixed_holders
+from ..services.domain import build_flight_out, fixed_holders, title_case
 
 router = APIRouter(prefix="/api/flights", tags=["flights"], dependencies=[Depends(get_current_user)])
 
@@ -101,7 +101,7 @@ def put_assignments(flight_id: int, items: list[AssignmentIn], db: Session = Dep
             if staff is None or staff.team != flight.shift:
                 raise HTTPException(status_code=400, detail="Unknown staff member")
             if staff_id not in on_duty:
-                raise HTTPException(status_code=400, detail=f"{staff.name} is not on today's roster")
+                raise HTTPException(status_code=400, detail=f"{title_case(staff.name)} is not on today's roster")
 
         busy = db.execute(
             select(Assignment.staff_id, Flight.flight_no)
@@ -118,7 +118,7 @@ def put_assignments(flight_id: int, items: list[AssignmentIn], db: Session = Dep
         ).first()
         if busy is not None:
             raise HTTPException(
-                status_code=409, detail=f"{staff_rows[busy[0]].name} is cleaning {busy[1]} right now"
+                status_code=409, detail=f"{title_case(staff_rows[busy[0]].name)} is cleaning {busy[1]} right now"
             )
 
     flight.assignments.clear()

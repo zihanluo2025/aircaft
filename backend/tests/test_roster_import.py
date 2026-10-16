@@ -70,6 +70,16 @@ def test_derive_shift_type_across_midnight():
     assert derive_shift_type("13:00", "05:50", window) == "all"
 
 
+def test_derive_shift_type_matches_the_real_night_shift_patterns():
+    # The employer's actual two patterns within the 13:00-06:00 night window: both real start times
+    # (15:50 and 19:50) land in the literal first half of the 17h window, so splitting down the
+    # middle mislabelled the 19:50 starts as "early" -- this is the real calibration.
+    window = ("13:00", "06:00")
+    assert derive_shift_type("15:50", "22:15", window) == "early"
+    assert derive_shift_type("19:50", "23:55", window) == "late"
+    assert derive_shift_type("15:50", "23:55", window) == "all"
+
+
 def test_wide_layout():
     text = "Name\t13/10/2026\t14/10/2026\tMon 15 Oct\nAlex K\tEarly\tAll day\tOff\nPriya S\tLate\tL\tfoo\n"
     result = parse_roster_text(text, TODAY)
@@ -191,6 +201,31 @@ def test_note_column_blank_grants_nothing():
     text = NOTE_HEADER + "Kibreab Fente Bizuneh - 09321\t15:50\t22:15\t15:50\t23:55\t\n"
     result = parse_roster_text(text, TODAY, window=("13:00", "06:00"))
     assert result.days["2026-10-12"]["Kibreab Fente Bizuneh - 09321"]["roles"] == []
+
+
+# ---- the actual employer .xlsx: a single header row, date and "Start" combined into one cell
+# ("Mon 12/10 Start") immediately followed by a plain "End" cell -- no separate sub-header row ----
+
+SINGLE_ROW_HEADER = "ADL - PM SHIFT - Week ending Sun 18 Oct 2026\nEmployee\tMon 12/10 Start\tEnd\tTue 13/10 Start\tEnd\tnote\n"
+
+
+def test_single_row_header_reads_times_and_note():
+    text = SINGLE_ROW_HEADER + "Jorja Olivia Mann - 09208\t15:50\t22:15\t\t\tTruck driver\n"
+    result = parse_roster_text(text, TODAY, window=("13:00", "06:00"))
+    assert sorted(result.days) == ["2026-10-12", "2026-10-13"]
+    entry = result.days["2026-10-12"]["Jorja Olivia Mann - 09208"]
+    assert entry["rstart"] == "15:50"
+    assert entry["rend"] == "22:15"
+    assert sorted(entry["roles"]) == ["Driver", "Truck"]
+    assert result.bad == []
+
+
+def test_single_row_header_tried_before_two_row_header():
+    # Both header styles could plausibly match a one-day paste; the single-row style (the real
+    # export) should win since its "Start" is right there in the date cell.
+    text = "Employee\tMon 12/10 Start\tEnd\n" + "Alex K\t15:50\t22:15\n"
+    result = parse_roster_text(text, TODAY, window=("13:00", "06:00"))
+    assert result.days["2026-10-12"]["Alex K"]["rstart"] == "15:50"
 
 
 def test_paired_layout_skips_a_leading_title_banner_row():

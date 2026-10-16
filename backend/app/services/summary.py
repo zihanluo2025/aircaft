@@ -29,7 +29,7 @@ def build_summary_text(
             head += f" | {f['minutes']} min"
         lines.append(head)
         lines.append(f"  Crew: {', '.join(f['crew']) if f['crew'] else 'no crew recorded'}")
-        lines.append(f"  {'Signed by ' + f['signed_by'] if f.get('signed_by') else 'Not signed'}")
+        lines.append(f"  {'Signed' if f.get('signed_by') else 'Not signed'}")
         if f.get("notes"):
             lines.append(f"  Notes: {f['notes']}")
     return "\n".join(lines) + "\n"

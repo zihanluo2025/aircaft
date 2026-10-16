@@ -12,9 +12,9 @@ from ..services.domain import (
     SHIFT_TYPE_LABEL,
     STATUS_LABEL,
     crew_of,
-    fixed_holders,
     flight_minutes,
     flight_status,
+    title_case,
 )
 from ..services.summary import build_summary_text
 
@@ -35,7 +35,6 @@ def get_report(
         .where(Flight.work_date == work_date, Flight.shift == shift)
         .order_by(Flight.eta, Flight.id)
     ).all()
-    live = fixed_holders(db, work_date, shift)
     entries = db.execute(
         select(RosterEntry, Staff)
         .join(Staff, Staff.id == RosterEntry.staff_id)
@@ -52,7 +51,7 @@ def get_report(
     report_flights: list[ReportFlight] = []
     summary_flights: list[dict] = []
     for f in flights:
-        crew = crew_of(db, f, live)
+        crew = crew_of(f)
         status = flight_status(f)
         report_flights.append(
             ReportFlight(
@@ -60,8 +59,11 @@ def get_report(
                 flight_no=f.flight_no,
                 eta=f.eta,
                 status=status,
+                started_at=f.started_at,
+                finished_at=f.finished_at,
                 minutes=flight_minutes(f),
                 crew_count=len(crew),
+                crew=crew,
                 signed=bool(f.sig_image),
             )
         )
@@ -84,7 +86,7 @@ def get_report(
                 person["minutes"] += flight_minutes(f) or 0
 
     has_plan = any(e.planned_type for e, _ in entries)
-    called_in = sorted(s.name for e, s in entries if e.shift_type and e.called_in_at)
+    called_in = sorted((title_case(s.name) for e, s in entries if e.shift_type and e.called_in_at), key=str.lower)
     changes: list[str] = []
     if has_plan:
         for e, s in sorted(entries, key=lambda r: r[1].name.lower()):
@@ -94,7 +96,7 @@ def get_report(
             if current and e.called_in_at and not planned:
                 continue  # already listed under Called in
             changes.append(
-                f"{s.name} ({SHIFT_TYPE_LABEL.get(planned, 'not planned')} to {SHIFT_TYPE_LABEL.get(current, 'off')})"
+                f"{title_case(s.name)} ({SHIFT_TYPE_LABEL.get(planned, 'not planned')} to {SHIFT_TYPE_LABEL.get(current, 'off')})"
             )
 
     summary = build_summary_text(

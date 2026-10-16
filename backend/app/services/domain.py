@@ -1,6 +1,7 @@
 """Helpers shared by the routers: flight status, fixed role holders, serialisation."""
 from __future__ import annotations
 
+import re
 from datetime import date
 from typing import Optional
 
@@ -10,10 +11,18 @@ from sqlalchemy.orm import Session
 from ..models import Flight, RosterEntry, Staff
 
 ROLE_ORDER = {"Driver": 0, "Toilet": 1, "Truck": 2}
+# Only Driver actually requires holding the matching licence to be assigned as the fixed role for the
+# day -- Truck duty also covers just helping load/unload, which anyone on duty can do.
+LICENCE_REQUIRED_ROLES = {"Driver"}
 STATUS_LABEL = {"sched": "Scheduled", "landed": "Landed", "cleaning": "Cleaning", "done": "Done", "cancelled": "Cancelled"}
 SHIFT_ORDER = {"early": 0, "late": 1, "all": 2}
 SHIFT_TYPE_LABEL = {"early": "Early", "late": "Late", "all": "All day"}
-DEFAULT_ROLES = ["Business", "Vacuum", "Economy - Front", "Economy - Mid", "Economy - Rear"]
+DEFAULT_ROLES = ["Business", "Vacuum", "Economy - Front", "Economy - Mid", "Economy - Rear", "Toilet", "Leading Hand"]
+
+
+def title_case(name: str) -> str:
+    """Imported rosters come through ALL CAPS; show names the way a person would actually write them."""
+    return re.sub(r"\S+", lambda m: m.group(0)[:1].upper() + m.group(0)[1:].lower(), name)
 
 
 def to_minutes(hhmm: str) -> int:
@@ -51,7 +60,7 @@ def fixed_holders(db: Session, work_date: date, shift: str) -> list[dict]:
             RosterEntry.role.is_not(None),
         )
     ).all()
-    holders = [{"role": e.role, "staff_id": s.id, "staff_name": s.name} for e, s in rows]
+    holders = [{"role": e.role, "staff_id": s.id, "staff_name": title_case(s.name)} for e, s in rows]
     holders.sort(key=lambda h: (ROLE_ORDER.get(h["role"], 9), h["staff_name"].lower()))
     return holders
 
@@ -63,19 +72,23 @@ def fixed_for(db: Session, f: Flight, live: Optional[list[dict]] = None) -> list
     return live if live is not None else fixed_holders(db, f.work_date, f.shift)
 
 
-def crew_of(db: Session, f: Flight, live: Optional[list[dict]] = None) -> list[dict]:
-    """Everyone recorded on the flight: the fixed role holders plus the per aircraft assignments."""
-    crew = list(fixed_for(db, f, live))
+def crew_of(f: Flight) -> list[dict]:
+    """Everyone who actually worked this specific flight: the fixed role holders locked in when
+    cleaning started (not just whoever currently holds those roles -- that is a day-wide, not a
+    per-flight, fact, and would otherwise count the same people on every aircraft before anyone has
+    actually been assigned) plus the per aircraft assignments."""
+    crew = list(f.fixed) if f.fixed is not None else []
     for a in f.assignments:
         if a.staff_id:
-            crew.append({"role": a.role, "staff_id": a.staff_id, "staff_name": a.staff.name if a.staff else ""})
+            crew.append({"role": a.role, "staff_id": a.staff_id, "staff_name": title_case(a.staff.name) if a.staff else ""})
     return crew
 
 
 def build_flight_out(db: Session, f: Flight, detail: bool = False, live: Optional[list[dict]] = None) -> dict:
     fixed = fixed_for(db, f, live)
     assignments = [
-        {"role": a.role, "staff_id": a.staff_id, "staff_name": a.staff.name if a.staff else ""} for a in f.assignments
+        {"role": a.role, "staff_id": a.staff_id, "staff_name": title_case(a.staff.name) if a.staff else ""}
+        for a in f.assignments
     ]
     data = {
         "id": f.id,

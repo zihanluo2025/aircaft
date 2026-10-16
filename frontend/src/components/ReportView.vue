@@ -1,10 +1,18 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { SHIFT_NAME, STATUS_LABEL } from '../constants.js'
+import { SHIFT_NAME } from '../constants.js'
+import { hhmm } from '../lib/time.js'
 import { actions, state, toast } from '../store.js'
 
 const report = computed(() => state.report)
+// The Flights table is a record of completed work -- flights still scheduled, landed or cleaning
+// aren't done yet, so they don't belong in it.
+const doneFlights = computed(() => report.value.flights.filter((f) => f.status === 'done'))
 const summary = ref(null)
+
+// Read-only detail, expanded inline -- not the editable flight sheet used elsewhere.
+const expandedId = ref(null)
+const toggleFlight = (id) => (expandedId.value = expandedId.value === id ? null : id)
 
 onMounted(() => actions.loadReport())
 
@@ -34,20 +42,46 @@ async function copy() {
     <div v-if="!report.flights.length" class="empty"><p>No flights to report on this day.</p></div>
     <template v-else>
       <h3>Flights</h3>
-      <div class="scroll">
+      <p class="muted" style="margin: 0 0 8px; font-size: 14px">Tap a flight to see who worked it and how long.</p>
+      <div v-if="!doneFlights.length" class="empty"><p>No flights finished cleaning yet.</p></div>
+      <div v-else class="scroll">
         <table>
           <thead>
-            <tr><th>Flight</th><th>ETA</th><th>Status</th><th>Min</th><th>Crew</th><th>Signed</th></tr>
+            <tr><th>Flight</th><th>ETA</th><th>Min</th><th>Staff</th><th>Signed</th></tr>
           </thead>
           <tbody>
-            <tr v-for="f in report.flights" :key="f.id">
-              <td>{{ f.flight_no }}</td>
-              <td class="n">{{ f.eta }}</td>
-              <td>{{ STATUS_LABEL[f.status] }}</td>
-              <td class="n">{{ f.minutes ?? '-' }}</td>
-              <td class="n">{{ f.crew_count }}</td>
-              <td>{{ f.signed ? 'Yes' : 'No' }}</td>
-            </tr>
+            <template v-for="f in doneFlights" :key="f.id">
+              <tr
+                class="rowbtn"
+                tabindex="0"
+                role="button"
+                :aria-expanded="expandedId === f.id"
+                :aria-label="'Details for ' + f.flight_no"
+                @click="toggleFlight(f.id)"
+                @keydown.enter="toggleFlight(f.id)"
+                @keydown.space.prevent="toggleFlight(f.id)"
+              >
+                <td>{{ f.flight_no }}</td>
+                <td class="n">{{ f.eta }}</td>
+                <td class="n">{{ f.minutes ?? '-' }}</td>
+                <td class="n">{{ f.crew_count || '-' }}</td>
+                <td>{{ f.signed ? 'Yes' : 'No' }}</td>
+              </tr>
+              <tr v-if="expandedId === f.id" class="detailrow">
+                <td colspan="5">
+                  <p v-if="!f.crew.length" class="muted" style="margin: 0">Nobody was assigned to this flight.</p>
+                  <div v-else class="fcrew">
+                    <div v-for="(c, i) in f.crew" :key="i" class="fcrewrow">
+                      <span class="lbl">{{ c.role }}</span><span>{{ c.staff_name || 'Unassigned' }}</span>
+                    </div>
+                  </div>
+                  <p v-if="f.started_at" class="muted" style="margin: 8px 0 0; font-size: 13px">
+                    {{ hhmm(f.started_at) }}&ndash;{{ f.finished_at ? hhmm(f.finished_at) : 'still cleaning' }}
+                    <template v-if="f.minutes !== null"> &middot; {{ f.minutes }} min</template>
+                  </p>
+                </td>
+              </tr>
+            </template>
           </tbody>
         </table>
       </div>

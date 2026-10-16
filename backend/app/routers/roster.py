@@ -18,7 +18,7 @@ from ..schemas import (
     RosterPatchOut,
     Shift,
 )
-from ..services.domain import SHIFT_ORDER
+from ..services.domain import LICENCE_REQUIRED_ROLES, SHIFT_ORDER, title_case
 from ..services.roster_import import QUAL_ROLES, ParsedRoster, parse_roster_text, parse_roster_xlsx
 
 router = APIRouter(prefix="/api/roster", tags=["roster"], dependencies=[Depends(get_current_user)])
@@ -35,12 +35,13 @@ def _window(shift: str) -> tuple[str, str]:
 def _entry_out(entry: RosterEntry, staff: Staff) -> RosterEntryOut:
     return RosterEntryOut(
         staff_id=staff.id,
-        name=staff.name,
+        name=title_case(staff.name),
         quals=list(staff.quals or []),
         shift_type=entry.shift_type,
         planned_type=entry.planned_type,
         role=entry.role,
         called_in_at=entry.called_in_at,
+        sick_at=entry.sick_at,
         rstart=entry.rstart,
         rend=entry.rend,
     )
@@ -91,7 +92,7 @@ def patch_entry(
     if staff is None or not staff.active:
         raise HTTPException(status_code=404, detail="Staff member not found")
     if staff.team != shift:
-        raise HTTPException(status_code=400, detail=f"{staff.name} belongs to the {staff.team} team")
+        raise HTTPException(status_code=400, detail=f"{title_case(staff.name)} belongs to the {staff.team} team")
 
     entry = db.scalar(
         select(RosterEntry).where(
@@ -111,13 +112,15 @@ def patch_entry(
             entry.role = None
             entry.called_in_at = None
             unassigned = _unassign(db, work_date, shift, staff_id)
+        else:  # back on duty, so any earlier sick call no longer applies
+            entry.sick_at = None
 
     if "role" in fields:
         if body.role is not None:
             if entry.shift_type is None:
                 raise HTTPException(status_code=400, detail="Put the person on the roster before giving them a role")
-            if body.role in QUAL_ROLES and body.role not in (staff.quals or []):
-                raise HTTPException(status_code=400, detail=f"{staff.name} is not qualified for {body.role}")
+            if body.role in LICENCE_REQUIRED_ROLES and body.role not in (staff.quals or []):
+                raise HTTPException(status_code=400, detail=f"{title_case(staff.name)} is not qualified for {body.role}")
         entry.role = body.role
 
     if "called_in" in fields:
@@ -127,6 +130,16 @@ def patch_entry(
             entry.called_in_at = entry.called_in_at or utcnow()
         else:
             entry.called_in_at = None
+
+    if "sick" in fields:
+        if body.sick:
+            entry.sick_at = entry.sick_at or utcnow()
+            entry.shift_type = None
+            entry.role = None
+            entry.called_in_at = None
+            unassigned = _unassign(db, work_date, shift, staff_id)
+        else:
+            entry.sick_at = None
 
     if "rstart" in fields and body.rstart is not None:
         entry.rstart = body.rstart

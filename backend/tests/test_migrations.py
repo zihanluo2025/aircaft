@@ -25,8 +25,21 @@ def test_adds_new_roster_entry_columns_to_an_old_database():
     with engine.begin() as conn:
         conn.execute(text("CREATE TABLE roster_entries (id INTEGER PRIMARY KEY, staff_id INTEGER)"))
         conn.execute(text("INSERT INTO roster_entries (staff_id) VALUES (1)"))
-    assert add_missing_columns(engine) == ["roster_entries.rstart", "roster_entries.rend"]
-    assert {"rstart", "rend"} <= {c["name"] for c in inspect(engine).get_columns("roster_entries")}
+    assert add_missing_columns(engine) == ["roster_entries.rstart", "roster_entries.rend", "roster_entries.sick_at"]
+    assert {"rstart", "rend", "sick_at"} <= {c["name"] for c in inspect(engine).get_columns("roster_entries")}
     with engine.connect() as conn:
-        assert conn.execute(text("SELECT rstart, rend FROM roster_entries")).one() == ("", "")
+        assert conn.execute(text("SELECT rstart, rend, sick_at FROM roster_entries")).one() == ("", "", None)
     assert add_missing_columns(engine) == []
+
+
+def test_nullable_column_gets_no_forced_default():
+    # sick_at uses the "NULL" sentinel: nullable, no default, unlike the NOT NULL DEFAULT '' columns.
+    engine = create_engine("sqlite://")
+    with engine.begin() as conn:
+        conn.execute(text("CREATE TABLE roster_entries (id INTEGER PRIMARY KEY, staff_id INTEGER)"))
+    add_missing_columns(engine)
+    sick_at = next(c for c in inspect(engine).get_columns("roster_entries") if c["name"] == "sick_at")
+    assert sick_at["nullable"] is True
+    with engine.begin() as conn:
+        conn.execute(text("INSERT INTO roster_entries (staff_id) VALUES (1)"))
+        assert conn.execute(text("SELECT sick_at FROM roster_entries")).one() == (None,)

@@ -56,6 +56,7 @@ class RosterEntry(Base):
     planned_type: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     role: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)  # Driver | Toilet | Truck, fixed for the day
     called_in_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    sick_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # called in sick, off today
     # The roster's actual Start / Indicative End for the day, HH:MM, "" when not recorded. shift_type
     # above is still what drives the Early/Late/All day grouping; these are the source of truth when
     # they came from an import or a manual correction.

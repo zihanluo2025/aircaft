@@ -49,8 +49,17 @@ function toggleHour(hour) {
   mixFilter.value = null // mix and hour filters are mutually exclusive
 }
 
+// The mix/hour filters narrow the pool before the status chips split it up, so a chip's count
+// always matches what tapping it actually shows -- no "(2)" that only reveals 1 because another
+// filter is still active underneath.
+const filtered = computed(() => {
+  let items = state.flights
+  if (mixFilter.value) items = items.filter(MIX_PREDICATES[mixFilter.value])
+  if (hourFilter.value !== null) items = items.filter((f) => f.eta && Number(f.eta.slice(0, 2)) === hourFilter.value)
+  return items
+})
 const groups = computed(() => {
-  const all = state.flights
+  const all = filtered.value
   return {
     all,
     upcoming: all.filter((f) => ['sched', 'landed'].includes(f.status)),
@@ -58,12 +67,7 @@ const groups = computed(() => {
     done: all.filter((f) => f.status === 'done'),
   }
 })
-const list = computed(() => {
-  let items = groups.value[filter.value] || groups.value.all
-  if (mixFilter.value) items = items.filter(MIX_PREDICATES[mixFilter.value])
-  if (hourFilter.value !== null) items = items.filter((f) => f.eta && Number(f.eta.slice(0, 2)) === hourFilter.value)
-  return items
-})
+const list = computed(() => groups.value[filter.value] || groups.value.all)
 
 /** Arrivals per hour, so the leading hand can see when aircraft bunch up. */
 const chart = computed(() => {

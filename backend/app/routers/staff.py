@@ -8,6 +8,7 @@ from ..database import get_db
 from ..deps import get_current_user
 from ..models import Staff
 from ..schemas import Shift, StaffIn, StaffOut, StaffPatch
+from ..services.domain import title_case
 
 router = APIRouter(prefix="/api/staff", tags=["staff"], dependencies=[Depends(get_current_user)])
 
@@ -19,12 +20,16 @@ def _get(db: Session, staff_id: int) -> Staff:
     return staff
 
 
+def _out(staff: Staff) -> StaffOut:
+    return StaffOut(id=staff.id, name=title_case(staff.name), team=staff.team, quals=list(staff.quals or []), active=staff.active)
+
+
 @router.get("", response_model=list[StaffOut])
 def list_staff(team: Optional[Shift] = Query(None), db: Session = Depends(get_db)):
     query = select(Staff).where(Staff.active.is_(True)).order_by(Staff.name)
     if team:
         query = query.where(Staff.team == team)
-    return db.scalars(query).all()
+    return [_out(s) for s in db.scalars(query).all()]
 
 
 @router.post("", response_model=StaffOut, status_code=201)
@@ -36,11 +41,11 @@ def create_staff(body: StaffIn, db: Session = Depends(get_db)):
         existing.active = True  # bring back someone who was removed earlier
         existing.quals = list(body.quals)
         db.commit()
-        return existing
+        return _out(existing)
     staff = Staff(name=body.name, team=body.team, quals=list(body.quals))
     db.add(staff)
     db.commit()
-    return staff
+    return _out(staff)
 
 
 @router.patch("/{staff_id}", response_model=StaffOut)
@@ -54,7 +59,7 @@ def patch_staff(staff_id: int, body: StaffPatch, db: Session = Depends(get_db)):
     if body.quals is not None:
         staff.quals = list(dict.fromkeys(body.quals))
     db.commit()
-    return staff
+    return _out(staff)
 
 
 @router.delete("/{staff_id}", status_code=204)

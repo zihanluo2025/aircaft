@@ -69,6 +69,7 @@ class RosterEntryOut(BaseModel):
     planned_type: Optional[ShiftType]
     role: Optional[FixedRole]
     called_in_at: Optional[UtcDateTime]
+    sick_at: Optional[UtcDateTime]
     rstart: str
     rend: str
 
@@ -86,6 +87,7 @@ class RosterPatch(BaseModel):
     shift_type: Optional[ShiftType] = None
     role: Optional[FixedRole] = None
     called_in: Optional[bool] = None
+    sick: Optional[bool] = None
     rstart: Optional[HHMM] = None
     rend: Optional[HHMM] = None
 
@@ -186,8 +188,11 @@ class ReportFlight(BaseModel):
     flight_no: str
     eta: str
     status: str
+    started_at: Optional[UtcDateTime]
+    finished_at: Optional[UtcDateTime]
     minutes: Optional[int]
     crew_count: int
+    crew: list[CrewMember]
     signed: bool
 
 
