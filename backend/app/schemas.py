@@ -144,6 +144,25 @@ class SignatureIn(BaseModel):
     image: Annotated[str, StringConstraints(max_length=400_000)]
 
 
+class PhotoIn(BaseModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)] = ""
+    # Signatures cap at 400_000 because a canvas line-drawing is tiny; a real camera photo (even
+    # compressed client-side) needs far more headroom.
+    image: Annotated[str, StringConstraints(max_length=3_000_000)]
+
+
+class PhotoRename(BaseModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)]
+
+
+class PhotoOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    image: str
+    created_at: UtcDateTime
+
+
 class CrewMember(BaseModel):
     role: str
     staff_id: Optional[int] = None

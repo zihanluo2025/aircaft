@@ -170,6 +170,9 @@ export const actions = {
   setTimes: (id, body) => run(() => api.flights.setTimes(id, body)),
   signFlight: (id, name, image) => run(() => api.flights.sign(id, name, image), 'Signature saved'),
   unsignFlight: (id) => run(() => api.flights.unsign(id)),
+  addPhoto: (flightId, body) => run(() => api.flights.photos.add(flightId, body)),
+  renamePhoto: (flightId, photoId, name) => run(() => api.flights.photos.rename(flightId, photoId, name)),
+  removePhoto: (flightId, photoId) => run(() => api.flights.photos.remove(flightId, photoId), 'Photo deleted'),
 
   async syncFlights() {
     if (state.syncing) return

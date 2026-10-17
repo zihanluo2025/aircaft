@@ -1,6 +1,7 @@
 from datetime import date as Date
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -16,6 +17,7 @@ from ..services.domain import (
     flight_status,
     title_case,
 )
+from ..services.report_export import build_report_workbook
 from ..services.summary import build_summary_text
 
 router = APIRouter(prefix="/api/report", tags=["report"], dependencies=[Depends(get_current_user)])
@@ -23,12 +25,7 @@ router = APIRouter(prefix="/api/report", tags=["report"], dependencies=[Depends(
 SHIFT_NAME = {"morning": "Morning", "night": "Night"}
 
 
-@router.get("", response_model=ReportOut)
-def get_report(
-    work_date: Date = Query(..., alias="date"),
-    shift: Shift = Query(...),
-    db: Session = Depends(get_db),
-):
+def _build_report(db: Session, work_date: Date, shift: str) -> ReportOut:
     flights = db.scalars(
         select(Flight)
         .options(selectinload(Flight.assignments).selectinload(Assignment.staff))
@@ -122,4 +119,29 @@ def get_report(
         called_in=called_in,
         roster_changes=changes,
         summary_text=summary,
+    )
+
+
+@router.get("", response_model=ReportOut)
+def get_report(
+    work_date: Date = Query(..., alias="date"),
+    shift: Shift = Query(...),
+    db: Session = Depends(get_db),
+):
+    return _build_report(db, work_date, shift)
+
+
+@router.get("/export")
+def export_report(
+    work_date: Date = Query(..., alias="date"),
+    shift: Shift = Query(...),
+    db: Session = Depends(get_db),
+):
+    report = _build_report(db, work_date, shift)
+    workbook = build_report_workbook(report)
+    filename = f"turnaround-{work_date.isoformat()}-{shift}.xlsx"
+    return StreamingResponse(
+        workbook,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

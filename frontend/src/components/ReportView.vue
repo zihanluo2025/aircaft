@@ -1,5 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { showImagePreview } from 'vant'
+import { api } from '../api.js'
 import { SHIFT_NAME } from '../constants.js'
 import { hhmm } from '../lib/time.js'
 import { actions, state, toast } from '../store.js'
@@ -12,7 +14,22 @@ const summary = ref(null)
 
 // Read-only detail, expanded inline -- not the editable flight sheet used elsewhere.
 const expandedId = ref(null)
-const toggleFlight = (id) => (expandedId.value = expandedId.value === id ? null : id)
+// Photos aren't part of the report payload (they're heavy) -- fetched once per flight, the first
+// time its row is expanded, and cached here so re-expanding doesn't refetch.
+const photosByFlight = ref({})
+async function toggleFlight(id) {
+  expandedId.value = expandedId.value === id ? null : id
+  if (expandedId.value && !(id in photosByFlight.value)) {
+    try {
+      photosByFlight.value = { ...photosByFlight.value, [id]: await api.flights.photos.list(id) }
+    } catch {
+      photosByFlight.value = { ...photosByFlight.value, [id]: [] }
+    }
+  }
+}
+function openPhoto(id, index) {
+  showImagePreview({ images: (photosByFlight.value[id] || []).map((p) => p.image), startPosition: index })
+}
 
 onMounted(() => actions.loadReport())
 
@@ -25,6 +42,24 @@ async function copy() {
     summary.value.focus()
     summary.value.select()
     toast('Text selected. Use Copy from the menu.')
+  }
+}
+
+const exporting = ref(false)
+async function exportExcel() {
+  exporting.value = true
+  try {
+    const { blob, filename } = await api.reportExport(state.date, state.shift)
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename || `turnaround-${report.value.date}-${report.value.shift}.xlsx`
+    link.click()
+    URL.revokeObjectURL(url)
+  } catch (error) {
+    toast(error.message || 'Could not export the report')
+  } finally {
+    exporting.value = false
   }
 }
 </script>
@@ -79,6 +114,12 @@ async function copy() {
                     {{ hhmm(f.started_at) }}&ndash;{{ f.finished_at ? hhmm(f.finished_at) : 'still cleaning' }}
                     <template v-if="f.minutes !== null"> &middot; {{ f.minutes }} min</template>
                   </p>
+                  <div v-if="(photosByFlight[f.id] || []).length" class="photogrid" style="margin-top: 10px">
+                    <div v-for="(p, i) in photosByFlight[f.id]" :key="p.id" class="photoitem">
+                      <img :src="p.image" :alt="p.name || 'Photo'" @click="openPhoto(f.id, i)" />
+                      <p class="photoname" style="cursor: default">{{ p.name || 'Untitled' }}</p>
+                    </div>
+                  </div>
                 </td>
               </tr>
             </template>
@@ -102,7 +143,10 @@ async function copy() {
 
       <h3 style="margin-top: 18px">Copy summary</h3>
       <textarea id="sumTxt" ref="summary" readonly :value="report.summary_text"></textarea>
-      <div class="two"><button class="btn" @click="copy">Copy text</button><span></span></div>
+      <div class="two">
+        <button class="btn" @click="copy">Copy text</button>
+        <button class="btn2" :disabled="exporting" @click="exportExcel">{{ exporting ? 'Exporting...' : 'Export Excel' }}</button>
+      </div>
     </template>
 
     <p class="foot">Signed in as {{ state.user.display_name || state.user.username }}</p>

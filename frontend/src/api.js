@@ -63,6 +63,29 @@ const patch = (path, body, params) => request('PATCH', path, { body, params })
 const put = (path, body, params) => request('PUT', path, { body, params })
 const del = (path) => request('DELETE', path)
 const postFile = (path, form) => request('POST', path, { form })
+
+/** For file downloads (the response isn't JSON) -- same auth header as everything else, but
+ * returns the raw blob and the filename the server suggested, instead of parsing a body. */
+async function getBlob(path, params) {
+  const query = params
+    ? new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null)).toString()
+    : ''
+  const headers = {}
+  const token = getToken()
+  if (token) headers.Authorization = `Bearer ${token}`
+  let response
+  try {
+    response = await fetch(`/api${path}${query ? `?${query}` : ''}`, { headers })
+  } catch {
+    throw Object.assign(new Error('Cannot reach the server. Check your connection.'), { status: 0 })
+  }
+  if (!response.ok) {
+    if (response.status === 401) onUnauthorized()
+    throw Object.assign(new Error(`Could not export (${response.status})`), { status: response.status })
+  }
+  const filename = /filename="?([^"]+)"?/.exec(response.headers.get('Content-Disposition') || '')?.[1]
+  return { blob: await response.blob(), filename }
+}
 function fileForm(shift, file) {
   const form = new FormData()
   form.append('shift', shift)
@@ -99,10 +122,17 @@ export const api = {
     setTimes: (id, body) => patch(`/flights/${id}/times`, body),
     sign: (id, name, image) => put(`/flights/${id}/signature`, { name, image }),
     unsign: (id) => del(`/flights/${id}/signature`),
+    photos: {
+      list: (flightId) => get(`/flights/${flightId}/photos`),
+      add: (flightId, body) => post(`/flights/${flightId}/photos`, body),
+      rename: (flightId, photoId, name) => patch(`/flights/${flightId}/photos/${photoId}`, { name }),
+      remove: (flightId, photoId) => del(`/flights/${flightId}/photos/${photoId}`),
+    },
   },
   flightData: {
     status: () => get('/flight-data/status'),
     sync: (date, shift) => post('/flight-data/sync', { date, shift }),
   },
   report: (date, shift) => get('/report', { date, shift }),
+  reportExport: (date, shift) => getBlob('/report/export', { date, shift }),
 }

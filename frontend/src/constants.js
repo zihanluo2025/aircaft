@@ -1,4 +1,5 @@
 export const SHIFT_LABEL = { early: 'Early', late: 'Late', all: 'All day' }
+export const SHIFT_ORDER = { early: 0, late: 1, all: 2 }
 // Standard Start/Indicative End for each shift type, calibrated from the real roster (matches the
 // thresholds in the backend's derive_shift_type). Switching someone's type jumps their times to
 // these -- still editable afterwards for a genuinely one-off time.

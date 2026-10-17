@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   Button as VanButton,
   Cell as VanCell,
@@ -10,13 +10,16 @@ import {
   Popup as VanPopup,
   Search as VanSearch,
   Tag as VanTag,
+  showImagePreview,
 } from 'vant'
 import { api } from '../api.js'
 import { FIXED_ROLES, PRESET_ROLES, SHIFT_LABEL, STATUS_LABEL } from '../constants.js'
+import { compressImage } from '../lib/image.js'
 import { shortName } from '../lib/names.js'
 import { fmtElapsed, hhmm, isoFromLocal } from '../lib/time.js'
 import { actions, onDuty, state, toast } from '../store.js'
 import SignaturePad from './SignaturePad.vue'
+import TimeField from './TimeField.vue'
 
 const f = computed(() => state.flights.find((x) => x.id === state.openFlightId) || null)
 
@@ -194,13 +197,89 @@ onUnmounted(() => {
 const elapsed = computed(() =>
   f.value && f.value.started_at && !f.value.finished_at ? fmtElapsed(now.value - new Date(f.value.started_at).getTime()) : '',
 )
-async function changeTime(field, event) {
-  const value = event.target.value
+// TimeField is a controlled component driven by hhmm(f.started_at/finished_at) -- if the save
+// fails, the prop simply doesn't change, no manual revert needed.
+function changeTime(field, value) {
   if (!value) return
-  const before = hhmm(f.value[field])
-  const result = await actions.setTimes(f.value.id, { [field]: isoFromLocal(f.value.work_date, value) })
-  if (result === undefined) event.target.value = before
+  actions.setTimes(f.value.id, { [field]: isoFromLocal(f.value.work_date, value) })
 }
+
+// ---- photos (attached to Notes: stains, damage, lost property) ----
+const photos = ref([])
+watch(
+  () => f.value && f.value.id,
+  async (id) => {
+    if (!id) {
+      photos.value = []
+      return
+    }
+    try {
+      photos.value = await api.flights.photos.list(id)
+    } catch {
+      photos.value = []
+    }
+  },
+  { immediate: true },
+)
+async function refreshPhotos() {
+  if (!f.value) return
+  try {
+    photos.value = await api.flights.photos.list(f.value.id)
+  } catch {
+    /* keep showing the previous list */
+  }
+}
+async function addPhotos(event) {
+  const files = Array.from(event.target.files || [])
+  event.target.value = ''
+  for (const file of files) {
+    try {
+      const image = await compressImage(file)
+      await actions.addPhoto(f.value.id, { name: `Photo ${photos.value.length + 1}`, image })
+      await refreshPhotos()
+    } catch (error) {
+      toast(error.message || 'Could not add that photo')
+    }
+  }
+}
+function openPhoto(index) {
+  showImagePreview({ images: photos.value.map((p) => p.image), startPosition: index })
+}
+
+const renamingPhotoId = ref(null)
+const renameDraft = ref('')
+const renameInputEl = ref(null)
+function startRename(p) {
+  renamingPhotoId.value = p.id
+  renameDraft.value = p.name
+  nextTick(() => renameInputEl.value?.focus())
+}
+async function commitRename(p) {
+  if (renamingPhotoId.value !== p.id) return
+  renamingPhotoId.value = null
+  const name = renameDraft.value.trim()
+  if (name === p.name) return
+  await actions.renamePhoto(f.value.id, p.id, name)
+  await refreshPhotos()
+}
+
+// Tap once to arm, tap again to actually delete -- same pattern as StaffCard's Call sick button, so
+// an accidental tap on a small overlay icon can't silently remove someone's evidence photo.
+const confirmDeletePhotoId = ref(null)
+let confirmDeletePhotoTimer = null
+function deletePhoto(p) {
+  if (confirmDeletePhotoId.value !== p.id) {
+    confirmDeletePhotoId.value = p.id
+    toast('Tap again to confirm')
+    clearTimeout(confirmDeletePhotoTimer)
+    confirmDeletePhotoTimer = setTimeout(() => (confirmDeletePhotoId.value = null), 3000)
+    return
+  }
+  clearTimeout(confirmDeletePhotoTimer)
+  confirmDeletePhotoId.value = null
+  actions.removePhoto(f.value.id, p.id).then(refreshPhotos)
+}
+onUnmounted(() => clearTimeout(confirmDeletePhotoTimer))
 
 // ---- signature ----
 const pad = ref(null)
@@ -239,37 +318,13 @@ async function saveSignature() {
     <div class="sbody">
       <details class="blk">
           <summary>Flight details</summary>
-          <div class="fields">
-            <label class="f">Flight number
-              <input type="text" :value="f.flight_no" autocomplete="off" @change="patch('flight_no', $event.target.value)" />
-            </label>
-            <label class="f">Airline
-              <input type="text" :value="f.airline" autocomplete="off" @change="patch('airline', $event.target.value)" />
-            </label>
-            <div class="grid2">
-              <label class="f">Rego
-                <input type="text" :value="f.rego" autocomplete="off" @change="patch('rego', $event.target.value)" />
-              </label>
-              <label class="f">Gate / bay
-                <input type="text" :value="f.gate" autocomplete="off" @change="patch('gate', $event.target.value)" />
-              </label>
-            </div>
-            <div class="grid2">
-              <label class="f">Scheduled time
-                <input type="time" :value="f.sched" @change="$event.target.value && patch('sched', $event.target.value)" />
-              </label>
-              <label class="f">Expected time (ETA)
-                <input type="time" :value="f.eta" @change="$event.target.value && patch('eta', $event.target.value)" />
-              </label>
-            </div>
-            <div class="two">
-              <button class="btn2" :aria-pressed="f.landed" @click="patch('landed', !f.landed)">
-                {{ f.landed ? 'Landed (tap to undo)' : 'Mark landed' }}
-              </button>
-              <button class="btn2" @click="patch('cancelled', !f.cancelled)">
-                {{ f.cancelled ? 'Restore flight' : 'Mark cancelled' }}
-              </button>
-            </div>
+          <div class="detgrid">
+            <div class="detfield"><span class="lbl">Flight</span><b>{{ f.flight_no || '—' }}</b></div>
+            <div class="detfield"><span class="lbl">Airline</span><b>{{ f.airline || '—' }}</b></div>
+            <div class="detfield"><span class="lbl">Rego</span><b>{{ f.rego || '—' }}</b></div>
+            <div class="detfield"><span class="lbl">Gate / bay</span><b>{{ f.gate || '—' }}</b></div>
+            <div class="detfield"><span class="lbl">Scheduled</span><b>{{ f.sched || '—' }}</b></div>
+            <div class="detfield"><span class="lbl">ETA</span><b>{{ f.eta || '—' }}</b></div>
           </div>
         </details>
 
@@ -285,12 +340,13 @@ async function saveSignature() {
             <button class="btn2" style="width: 100%" @click="actions.reopenFlight(f.id)">Reopen</button>
           </template>
           <div v-if="f.started_at" class="times">
-            <label class="f">Started
-              <input type="time" :value="hhmm(f.started_at)" @change="changeTime('started_at', $event)" />
-            </label>
-            <label v-if="f.finished_at" class="f">Finished
-              <input type="time" :value="hhmm(f.finished_at)" @change="changeTime('finished_at', $event)" />
-            </label>
+            <TimeField label="Started" :model-value="hhmm(f.started_at)" @update:model-value="(v) => changeTime('started_at', v)" />
+            <TimeField
+              v-if="f.finished_at"
+              label="Finished"
+              :model-value="hhmm(f.finished_at)"
+              @update:model-value="(v) => changeTime('finished_at', v)"
+            />
             <span v-else></span>
           </div>
         </section>
@@ -384,6 +440,39 @@ async function saveSignature() {
             placeholder="Stains, lost property, damage, anything to hand over"
             @change="patch('notes', $event.target.value)"
           ></textarea>
+          <div class="phototools">
+            <label class="btn2 phototool">
+              Take photo
+              <input type="file" accept="image/*" capture="environment" @change="addPhotos" />
+            </label>
+            <label class="btn2 phototool">
+              Choose photos
+              <input type="file" accept="image/*" multiple @change="addPhotos" />
+            </label>
+          </div>
+          <div v-if="photos.length" class="photogrid">
+            <div v-for="(p, i) in photos" :key="p.id" class="photoitem">
+              <img :src="p.image" :alt="p.name || 'Photo'" @click="openPhoto(i)" />
+              <button
+                class="btn2 icn photodelete"
+                :class="{ armed: confirmDeletePhotoId === p.id }"
+                :aria-label="confirmDeletePhotoId === p.id ? 'Tap again to confirm delete' : 'Delete photo'"
+                @click="deletePhoto(p)"
+              >
+                <van-icon name="delete-o" size="16" />
+              </button>
+              <input
+                v-if="renamingPhotoId === p.id"
+                ref="renameInputEl"
+                v-model="renameDraft"
+                type="text"
+                class="photoname"
+                @blur="commitRename(p)"
+                @keyup.enter="commitRename(p)"
+              />
+              <button v-else class="photoname photonamebtn" @click="startRename(p)">{{ p.name || 'Untitled' }}</button>
+            </div>
+          </div>
         </section>
 
         <section class="blk">

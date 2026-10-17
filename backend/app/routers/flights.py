@@ -8,12 +8,15 @@ from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
 from ..deps import get_current_user
-from ..models import Assignment, Flight, RosterEntry, Staff, utcnow
+from ..models import Assignment, Flight, FlightPhoto, RosterEntry, Staff, utcnow
 from ..schemas import (
     AssignmentIn,
     FlightDetail,
     FlightOut,
     FlightPatch,
+    PhotoIn,
+    PhotoOut,
+    PhotoRename,
     Shift,
     SignatureIn,
     TimesIn,
@@ -81,6 +84,17 @@ def delete_flight(flight_id: int, db: Session = Depends(get_db)):
 def put_assignments(flight_id: int, items: list[AssignmentIn], db: Session = Depends(get_db)):
     """Replace the per aircraft jobs. People newly added must be on duty and not busy on another aircraft."""
     flight = _load(db, flight_id)
+
+    seen: set[int] = set()
+    for item in items:
+        if item.staff_id is None:
+            continue
+        if item.staff_id in seen:
+            staff = db.get(Staff, item.staff_id)
+            name = title_case(staff.name) if staff else "This person"
+            raise HTTPException(status_code=400, detail=f"{name} is assigned twice -- pick one position")
+        seen.add(item.staff_id)
+
     current = {a.staff_id for a in flight.assignments if a.staff_id}
     new_ids = {i.staff_id for i in items if i.staff_id} - current
 
@@ -211,3 +225,50 @@ def clear_signature(flight_id: int, db: Session = Depends(get_db)):
     flight.signed_at = None
     db.commit()
     return build_flight_out(db, flight, detail=True)
+
+
+def _get_flight(db: Session, flight_id: int) -> Flight:
+    flight = db.get(Flight, flight_id)
+    if flight is None:
+        raise HTTPException(status_code=404, detail="Flight not found")
+    return flight
+
+
+def _get_photo(db: Session, flight_id: int, photo_id: int) -> FlightPhoto:
+    photo = db.scalar(select(FlightPhoto).where(FlightPhoto.id == photo_id, FlightPhoto.flight_id == flight_id))
+    if photo is None:
+        raise HTTPException(status_code=404, detail="Photo not found")
+    return photo
+
+
+@router.get("/{flight_id}/photos", response_model=list[PhotoOut])
+def list_photos(flight_id: int, db: Session = Depends(get_db)):
+    _get_flight(db, flight_id)
+    return db.scalars(select(FlightPhoto).where(FlightPhoto.flight_id == flight_id).order_by(FlightPhoto.id)).all()
+
+
+@router.post("/{flight_id}/photos", response_model=PhotoOut, status_code=201)
+def add_photo(flight_id: int, body: PhotoIn, db: Session = Depends(get_db)):
+    _get_flight(db, flight_id)
+    if not body.image.startswith("data:image/"):
+        raise HTTPException(status_code=400, detail="The photo must be an image")
+    photo = FlightPhoto(flight_id=flight_id, name=body.name, image=body.image)
+    db.add(photo)
+    db.commit()
+    db.refresh(photo)
+    return photo
+
+
+@router.patch("/{flight_id}/photos/{photo_id}", response_model=PhotoOut)
+def rename_photo(flight_id: int, photo_id: int, body: PhotoRename, db: Session = Depends(get_db)):
+    photo = _get_photo(db, flight_id, photo_id)
+    photo.name = body.name
+    db.commit()
+    return photo
+
+
+@router.delete("/{flight_id}/photos/{photo_id}", status_code=204)
+def remove_photo(flight_id: int, photo_id: int, db: Session = Depends(get_db)):
+    photo = _get_photo(db, flight_id, photo_id)
+    db.delete(photo)
+    db.commit()

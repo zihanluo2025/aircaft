@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { FIXED_ROLES, LICENCE_REQUIRED_ROLES, SHIFT_LABEL, SHIFT_NAME } from '../constants.js'
+import { FIXED_ROLES, LICENCE_REQUIRED_ROLES, SHIFT_LABEL, SHIFT_NAME, SHIFT_ORDER } from '../constants.js'
 import { shortName } from '../lib/names.js'
 import { actions, onDuty, state, toast } from '../store.js'
 import StaffCard from './StaffCard.vue'
@@ -34,7 +34,11 @@ const everyone = computed(() => {
       },
   )
 })
-const onDutyList = computed(() => everyone.value.filter((e) => e.shift_type))
+// Grouped by shift type (Early, then Late, then All day) so people on the same shift sit together,
+// rather than in whatever order the roster happened to list them.
+const onDutyList = computed(() =>
+  everyone.value.filter((e) => e.shift_type).sort((a, b) => SHIFT_ORDER[a.shift_type] - SHIFT_ORDER[b.shift_type]),
+)
 const offDutyList = computed(() => everyone.value.filter((e) => !e.shift_type))
 
 const groups = computed(() => {

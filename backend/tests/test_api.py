@@ -147,6 +147,19 @@ def test_cannot_double_book_a_cleaner(client):
     assert "Priya S" in clash.json()["detail"]
 
 
+def test_cannot_assign_the_same_person_twice_on_one_flight(client):
+    # A race between two quick "+ Add" taps (or a replayed request) should not be able to put the
+    # same person in two slots on the one aircraft.
+    ids = seed_team(client)
+    flight = new_flight(client)
+    dupe = client.put(
+        f"/api/flights/{flight['id']}/assignments",
+        json=[{"role": "Toilet", "staff_id": ids["Priya S"]}, {"role": "Toilet", "staff_id": ids["Priya S"]}],
+    )
+    assert dupe.status_code == 400
+    assert "Priya S" in dupe.json()["detail"]
+
+
 def test_only_people_on_duty_can_be_assigned(client):
     ids = seed_team(client)
     flight = new_flight(client)
@@ -281,3 +294,62 @@ def test_names_are_shown_in_title_case(client):
     assert roster["entries"][0]["name"] == "John O'connor"
     staff = client.get("/api/staff", params={"team": "morning"}).json()
     assert staff[0]["name"] == "John O'connor"
+
+
+def test_flight_photos_crud(client):
+    flight = new_flight(client)
+
+    added = client.post(
+        f"/api/flights/{flight['id']}/photos",
+        json={"name": "Stain row 12", "image": "data:image/jpeg;base64,AAAA"},
+    )
+    assert added.status_code == 201, added.text
+    photo = added.json()
+    assert photo["name"] == "Stain row 12"
+
+    listed = client.get(f"/api/flights/{flight['id']}/photos").json()
+    assert len(listed) == 1
+    assert listed[0]["id"] == photo["id"]
+
+    renamed = client.patch(f"/api/flights/{flight['id']}/photos/{photo['id']}", json={"name": "Seat 12A stain"})
+    assert renamed.status_code == 200
+    assert renamed.json()["name"] == "Seat 12A stain"
+
+    bad = client.post(f"/api/flights/{flight['id']}/photos", json={"name": "x", "image": "not-an-image"})
+    assert bad.status_code == 400
+
+    removed = client.delete(f"/api/flights/{flight['id']}/photos/{photo['id']}")
+    assert removed.status_code == 204
+    assert client.get(f"/api/flights/{flight['id']}/photos").json() == []
+
+
+def test_flight_photos_are_deleted_with_the_flight(client):
+    flight = new_flight(client)
+    client.post(f"/api/flights/{flight['id']}/photos", json={"name": "", "image": "data:image/jpeg;base64,AAAA"})
+    assert client.delete(f"/api/flights/{flight['id']}").status_code == 204
+    # the flight is gone, so its photo endpoint 404s rather than returning orphaned rows
+    assert client.get(f"/api/flights/{flight['id']}/photos").status_code == 404
+
+
+def test_report_export_is_a_real_xlsx(client):
+    from openpyxl import load_workbook
+    from io import BytesIO
+
+    ids = seed_team(client)
+    client.patch(f"/api/staff/{ids['Alex K']}", json={"quals": ["Driver"]})
+    client.patch(f"/api/roster/{ids['Alex K']}", params=Q, json={"role": "Driver"})
+    flight = new_flight(client)
+    client.post(f"/api/flights/{flight['id']}/start")
+    client.post(f"/api/flights/{flight['id']}/finish")
+
+    response = client.get("/api/report/export", params=Q)
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    assert "turnaround-2026-10-13-morning.xlsx" in response.headers["content-disposition"]
+
+    wb = load_workbook(BytesIO(response.content))
+    assert wb.sheetnames == ["Summary", "Flights", "Per person"]
+    flights_rows = list(wb["Flights"].iter_rows(values_only=True))
+    assert flights_rows[0] == ("Flight", "ETA", "Status", "Minutes", "Staff", "Signed", "Crew")
+    assert flights_rows[1][0] == "QF 705"
+    assert flights_rows[1][2] == "done"

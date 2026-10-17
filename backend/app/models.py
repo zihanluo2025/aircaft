@@ -94,6 +94,7 @@ class Flight(Base):
     assignments: Mapped[list["Assignment"]] = relationship(
         back_populates="flight", cascade="all, delete-orphan", order_by="Assignment.position"
     )
+    photos: Mapped[list["FlightPhoto"]] = relationship(cascade="all, delete-orphan", order_by="FlightPhoto.id")
 
 
 class Assignment(Base):
@@ -109,6 +110,18 @@ class Assignment(Base):
 
     flight: Mapped["Flight"] = relationship(back_populates="assignments")
     staff: Mapped[Optional["Staff"]] = relationship()
+
+
+class FlightPhoto(Base):
+    """A photo attached to a flight's notes -- stains, damage, lost property, anything to hand over."""
+
+    __tablename__ = "flight_photos"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    flight_id: Mapped[int] = mapped_column(ForeignKey("flights.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(100), default="")
+    image: Mapped[str] = mapped_column(Text)  # data:image/jpeg;base64,...
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class FlightSyncLog(Base):

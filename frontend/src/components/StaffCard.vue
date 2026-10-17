@@ -3,6 +3,7 @@ import { computed, onUnmounted, ref } from 'vue'
 import { QUAL_LABEL, SHIFT_LABEL, SHIFT_TIMES } from '../constants.js'
 import { hhmm } from '../lib/time.js'
 import { actions, state, toast } from '../store.js'
+import TimeField from './TimeField.vue'
 
 const props = defineProps({ person: { type: Object, required: true } })
 // `props.person` is swapped for a brand-new object every time the roster refreshes (the API returns
@@ -54,26 +55,27 @@ function callSick() {
 onUnmounted(() => clearTimeout(confirmSickTimer))
 
 const undoSick = () => actions.rosterPatch(e.value.staff_id, { sick: false })
-async function changeRosterTime(field, event) {
-  const value = event.target.value
+// TimeField is a controlled component driven by e.rstart/e.rend -- if the save fails, the prop
+// simply doesn't change, so the field naturally keeps showing the last real value with no manual
+// revert needed (unlike the native <input type=time> this replaced).
+function changeRosterTime(field, value) {
   if (!value) return
-  const before = e.value[field]
-  const result = await actions.rosterPatch(e.value.staff_id, { [field]: value })
-  if (result === undefined) event.target.value = before // the server said no, show the old time again
+  actions.rosterPatch(e.value.staff_id, { [field]: value })
 }
 </script>
 
 <template>
   <div class="card person" :class="e.shift_type ? 'sh-' + e.shift_type : 'off'">
-    <div class="nm">
-      <div class="namerow">
-        <strong>{{ e.name }}</strong>
-        <span v-if="e.shift_type" class="tag" :class="'sh-' + e.shift_type">{{ SHIFT_LABEL[e.shift_type] }}</span>
-        <span v-if="e.role" class="tag role">{{ e.role }} today</span>
-        <span v-if="e.called_in_at" class="tag call">Call in</span>
-        <span v-if="e.sick_at" class="tag sick">Sick</span>
-        <span v-if="isChanged && e.planned_type" class="tag chg">Changed</span>
-      </div>
+    <div class="namerow">
+      <strong>{{ e.name }}</strong>
+      <span v-if="e.role" class="tag role">{{ e.role }} today</span>
+      <span v-if="e.called_in_at" class="tag call">Call in</span>
+      <span v-if="e.sick_at" class="tag sick">Sick</span>
+      <span v-if="isChanged && e.planned_type" class="tag chg">Changed</span>
+    </div>
+    <div class="cardrow">
+      <span v-if="e.rstart || e.rend" class="meta">{{ e.rstart || '--:--' }}&ndash;{{ e.rend || '--:--' }}</span>
+      <span v-else></span>
       <div class="nmactions">
         <button
           v-if="e.shift_type"
@@ -94,7 +96,6 @@ async function changeRosterTime(field, event) {
         </button>
       </div>
     </div>
-    <div v-if="e.rstart || e.rend" class="meta">{{ e.rstart || '--:--' }}&ndash;{{ e.rend || '--:--' }}</div>
     <div v-if="e.quals.length" class="meta">Qualified: {{ e.quals.map((q) => QUAL_LABEL[q] || q).join(', ') }}</div>
     <div v-if="e.called_in_at" class="meta">Called in at {{ hhmm(e.called_in_at) }}</div>
     <div v-if="note" class="meta">{{ note }}</div>
@@ -117,12 +118,8 @@ async function changeRosterTime(field, event) {
       </button>
 
       <div v-if="e.shift_type" class="two">
-        <label class="f">Start
-          <input type="time" :value="e.rstart" @change="changeRosterTime('rstart', $event)" />
-        </label>
-        <label class="f">Indicative end
-          <input type="time" :value="e.rend" @change="changeRosterTime('rend', $event)" />
-        </label>
+        <TimeField label="Start" :model-value="e.rstart" @update:model-value="(v) => changeRosterTime('rstart', v)" />
+        <TimeField label="Indicative end" :model-value="e.rend" @update:model-value="(v) => changeRosterTime('rend', v)" />
       </div>
       <button v-else-if="e.sick_at" class="btn2" style="width: 100%" @click="undoSick">Undo sick</button>
     </template>
