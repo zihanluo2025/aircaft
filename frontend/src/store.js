@@ -190,8 +190,8 @@ export const actions = {
   },
 
   // ---- roster and team ----
-  rosterPatch: (staffId, body) =>
-    run(() => api.roster.patch(staffId, state.date, state.shift, body)).then((r) => (r === true ? undefined : r)),
+  rosterPatch: (staffId, body, okMessage) =>
+    run(() => api.roster.patch(staffId, state.date, state.shift, body), okMessage).then((r) => (r === true ? undefined : r)),
   async importPreview(text) {
     try {
       return await api.roster.importPreview(state.shift, text)
@@ -222,7 +222,6 @@ export const actions = {
     }
     return result
   },
-  addStaff: (body) => run(() => api.staff.create(body), `${body.name} added to team`),
   patchStaff: (id, body) => run(() => api.staff.patch(id, body)),
   removeStaff: (id) => run(() => api.staff.remove(id), 'Removed from team'),
 

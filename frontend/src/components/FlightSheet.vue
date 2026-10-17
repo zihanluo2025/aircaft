@@ -1,5 +1,16 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import {
+  Button as VanButton,
+  Cell as VanCell,
+  CellGroup as VanCellGroup,
+  Checkbox as VanCheckbox,
+  CheckboxGroup as VanCheckboxGroup,
+  Icon as VanIcon,
+  Popup as VanPopup,
+  Search as VanSearch,
+  Tag as VanTag,
+} from 'vant'
 import { api } from '../api.js'
 import { FIXED_ROLES, PRESET_ROLES, SHIFT_LABEL, STATUS_LABEL } from '../constants.js'
 import { shortName } from '../lib/names.js'
@@ -17,7 +28,9 @@ function patch(field, value) {
 // ---- fixed roles and crew rows ----
 const holders = (role) => f.value.fixed.filter((x) => x.role === role).map((x) => x.staff_name)
 
-/** People already working on another aircraft, so the same person is not booked twice. */
+/** People already working on another aircraft -- shown so the leading hand can see where someone
+ * is, but picking them is still allowed: in practice people finish their part on one aircraft and
+ * move to a second one that's already underway, well before the first one is actually done. */
 const busy = computed(() => {
   const map = new Map()
   for (const other of state.flights) {
@@ -25,7 +38,7 @@ const busy = computed(() => {
     for (const a of other.assignments) {
       if (!a.staff_id) continue
       const prev = map.get(a.staff_id)
-      if (!prev || other.status === 'cleaning') map.set(a.staff_id, { no: other.flight_no, status: other.status })
+      if (!prev || other.status === 'cleaning') map.set(a.staff_id, { id: other.id, no: other.flight_no, status: other.status })
     }
   }
   return map
@@ -42,7 +55,7 @@ function personOptions() {
     return {
       id: e.staff_id,
       label: `${shortName(e.name)} (${info})${tag}`,
-      disabled: assignedIds.value.has(e.staff_id) || (!!other && other.status === 'cleaning'),
+      disabled: assignedIds.value.has(e.staff_id),
       fixed: !!e.role,
     }
   })
@@ -61,10 +74,19 @@ const toiletOptions = computed(() =>
       return {
         id: x.staff_id,
         label: `${shortName(x.staff_name)}${tag}`,
-        disabled: assignedIds.value.has(x.staff_id) || (!!other && other.status === 'cleaning'),
+        disabled: assignedIds.value.has(x.staff_id),
       }
     }),
 )
+
+/** Clears every row on another flight that still has this person, freeing them up to be assigned
+ * here -- used when moving someone off an aircraft that is still mid-clean. */
+function freeFromOtherFlight(otherFlightId, staffId) {
+  const other = state.flights.find((x) => x.id === otherFlightId)
+  if (!other) return Promise.resolve(true)
+  const rows = other.assignments.map((a) => ({ role: a.role, staff_id: a.staff_id === staffId ? null : a.staff_id }))
+  return actions.saveAssignments(otherFlightId, rows)
+}
 
 // Group the flat assignment rows by role so each section can show multiple people as chips.
 const roleGroups = computed(() => {
@@ -85,10 +107,17 @@ const peopleIn = (g) => g.rows.filter((r) => r.staff_id)
 
 const rowsPayload = () => f.value.assignments.map((a) => ({ role: a.role, staff_id: a.staff_id }))
 
-function addPerson(role, event) {
-  const staffId = event.target.value ? Number(event.target.value) : null
-  event.target.value = ''
+async function addPerson(role, staffId) {
   if (!staffId) return
+
+  const other = busy.value.get(staffId)
+  if (other && other.status === 'cleaning') {
+    const name = shortName((onDuty.value.find((e) => e.staff_id === staffId) || {}).name || 'This person')
+    if (!confirm(`${name} is currently cleaning ${other.no}. Move them to ${role} here instead?`)) return
+    const freed = await freeFromOtherFlight(other.id, staffId)
+    if (freed === undefined) return
+  }
+
   const rows = rowsPayload()
   const emptyIndex = rows.findIndex((r) => r.role === role && !r.staff_id)
   if (emptyIndex >= 0) rows[emptyIndex].staff_id = staffId
@@ -105,6 +134,41 @@ function removePerson(role, index) {
 function removeRoleGroup(role) {
   const rows = rowsPayload().filter((r) => r.role !== role)
   actions.saveAssignments(f.value.id, rows)
+}
+
+// ---- "+ Add" picker: a searchable, multi-select list (Vant popup + search + checkboxes), replacing
+// the old native <select> -- a role/section can hold more than one person, so picking should too.
+// A whole role/section is rarely removed, unlike adding/removing people in it -- keep that × out of
+// the way behind an explicit Edit toggle so it can't be tapped by accident.
+const editingRoles = ref(false)
+const pickerOpen = ref(false)
+const pickerRole = ref('')
+const pickerQuery = ref('')
+const pickerSelected = ref([])
+function openPicker(role) {
+  if (role === 'Toilet' && !toiletOptions.value.length) {
+    return toast('Nobody is Toilet today. Set it on the Crew tab.')
+  }
+  pickerRole.value = role
+  pickerQuery.value = ''
+  pickerSelected.value = []
+  pickerOpen.value = true
+}
+const pickerOptions = computed(() =>
+  pickerRole.value === 'Toilet' ? toiletOptions.value : [...cleanerOptions.value, ...fixedPersonOptions.value],
+)
+const filteredPickerOptions = computed(() => {
+  const q = pickerQuery.value.trim().toLowerCase()
+  if (!q) return pickerOptions.value
+  return pickerOptions.value.filter((o) => o.label.toLowerCase().includes(q))
+})
+async function confirmPicker() {
+  const role = pickerRole.value
+  const ids = pickerSelected.value
+  pickerOpen.value = false
+  for (const id of ids) {
+    await addPerson(role, id)
+  }
 }
 const newRole = ref('')
 function addRow() {
@@ -245,44 +309,71 @@ async function saveSignature() {
         </section>
 
         <section class="blk">
-          <h3>On this aircraft</h3>
+          <div class="sectionhead">
+            <h3>On this aircraft</h3>
+            <button class="ghost" @click="editingRoles = !editingRoles">{{ editingRoles ? 'Done' : 'Edit' }}</button>
+          </div>
           <p v-if="!onDuty.length" class="muted" style="margin-top: 0">
             Nobody is on today's roster. Add people on the Crew tab first.
           </p>
-          <div v-for="g in roleGroups" :key="g.role" class="rolegrp">
-            <div class="rghead">
-              <span class="rglbl">{{ g.role }}</span>
-              <button class="x sm" :aria-label="'Remove ' + g.role" @click="removeRoleGroup(g.role)">&times;</button>
-            </div>
-            <div class="ppl">
-              <span v-for="row in peopleIn(g)" :key="row.index" class="pchip">
-                {{ shortName(row.staff_name) }}
-                <button :aria-label="'Remove ' + row.staff_name + ' from ' + g.role" @click="removePerson(g.role, row.index)">&times;</button>
-              </span>
-              <span v-if="g.role === 'Toilet' && !toiletOptions.length" class="muted" style="font-size: 14px">
-                Nobody is Toilet today. Set it on the Crew tab.
-              </span>
-              <select v-else class="addperson" :aria-label="'Add person to ' + g.role" @change="addPerson(g.role, $event)">
-                <option value="">+ Add person</option>
-                <template v-if="g.role === 'Toilet'">
-                  <option v-for="o in toiletOptions" :key="o.id" :value="o.id" :disabled="o.disabled">{{ o.label }}</option>
-                </template>
-                <template v-else>
-                  <optgroup v-if="cleanerOptions.length" label="Cleaners">
-                    <option v-for="o in cleanerOptions" :key="o.id" :value="o.id" :disabled="o.disabled">{{ o.label }}</option>
-                  </optgroup>
-                  <optgroup v-if="fixedPersonOptions.length" label="Driver, toilet, truck">
-                    <option v-for="o in fixedPersonOptions" :key="o.id" :value="o.id" :disabled="o.disabled">{{ o.label }}</option>
-                  </optgroup>
-                </template>
-              </select>
-            </div>
-          </div>
+          <van-cell-group v-if="roleGroups.length" inset class="rolecells">
+            <van-cell v-for="g in roleGroups" :key="g.role" :title="g.role" center>
+              <template v-if="!peopleIn(g).length" #value>
+                <van-tag plain type="primary" round size="large" class="addtag" @click="openPicker(g.role)">+ Add</van-tag>
+              </template>
+              <template v-if="editingRoles" #right-icon>
+                <van-icon name="cross" size="18" :aria-label="'Remove ' + g.role" @click="removeRoleGroup(g.role)" />
+              </template>
+              <template v-if="peopleIn(g).length || (g.role === 'Toilet' && !toiletOptions.length)" #label>
+                <div v-if="peopleIn(g).length" class="ppl">
+                  <van-tag
+                    v-for="row in peopleIn(g)"
+                    :key="row.index"
+                    type="primary"
+                    round
+                    closeable
+                    size="large"
+                    @close="removePerson(g.role, row.index)"
+                  >
+                    {{ shortName(row.staff_name) }}
+                  </van-tag>
+                  <van-tag plain type="primary" round size="large" class="addtag" @click="openPicker(g.role)">+ Add</van-tag>
+                </div>
+                <p v-else class="muted" style="margin: 2px 0 0; font-size: 13px">Nobody is Toilet today. Set it on the Crew tab.</p>
+              </template>
+            </van-cell>
+          </van-cell-group>
           <div class="addrow">
             <input v-model="newRole" type="text" list="role-list" placeholder="Role or section" aria-label="Role to add" autocomplete="off" />
             <datalist id="role-list"><option v-for="p in PRESET_ROLES" :key="p" :value="p"></option></datalist>
             <button class="btn2" @click="addRow">Add role</button>
           </div>
+          <van-popup v-model:show="pickerOpen" position="bottom" round closeable class="pickersheet">
+            <div class="pickerhead">
+              <h3>Add to {{ pickerRole }}</h3>
+              <van-search v-model="pickerQuery" placeholder="Search by name" />
+            </div>
+            <div class="pickerlist">
+              <p v-if="!filteredPickerOptions.length" class="muted" style="margin: 16px">Nobody matches.</p>
+              <van-checkbox-group v-else v-model="pickerSelected">
+                <van-checkbox
+                  v-for="o in filteredPickerOptions"
+                  :key="o.id"
+                  :name="o.id"
+                  :disabled="o.disabled"
+                  shape="square"
+                  class="pickerrow"
+                >
+                  {{ o.label }}
+                </van-checkbox>
+              </van-checkbox-group>
+            </div>
+            <div class="pickerfoot">
+              <van-button block type="primary" :disabled="!pickerSelected.length" @click="confirmPicker">
+                {{ pickerSelected.length ? `Add ${pickerSelected.length}` : 'Add' }}
+              </van-button>
+            </div>
+          </van-popup>
         </section>
 
         <section class="blk">

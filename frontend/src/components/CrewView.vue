@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { FIXED_ROLES, LICENCE_REQUIRED_ROLES, QUAL_LABEL, QUAL_ROLES, SHIFT_LABEL, SHIFT_NAME, SHIFT_TIMES } from '../constants.js'
+import { FIXED_ROLES, LICENCE_REQUIRED_ROLES, SHIFT_LABEL, SHIFT_NAME } from '../constants.js'
 import { shortName } from '../lib/names.js'
 import { actions, onDuty, state, toast } from '../store.js'
 import StaffCard from './StaffCard.vue'
@@ -10,8 +10,6 @@ const pickRole = ref(null)
 const importOpen = ref(false)
 const impText = ref('')
 const impRes = ref(null)
-const newName = ref('')
-const newQuals = ref([])
 
 const hasPlan = computed(() => state.roster.has_plan)
 const isChanged = (e) => hasPlan.value && !!e.shift_type && e.planned_type !== e.shift_type
@@ -104,23 +102,6 @@ function onFile(event) {
   reader.readAsText(file)
 }
 
-// ---- add staff ----
-function toggleNewQual(role) {
-  newQuals.value = newQuals.value.includes(role) ? newQuals.value.filter((q) => q !== role) : [...newQuals.value, role]
-}
-// Adding a staff member is one step: create them, then put them straight on today's roster as a
-// call-in -- the only reason to add someone mid-shift is to cover for someone else.
-async function addStaff(type) {
-  const name = newName.value.trim()
-  if (!name) return toast('Enter a name')
-  const staff = await actions.addStaff({ name, team: state.shift, quals: newQuals.value })
-  if (staff && staff.id) {
-    const [rstart, rend] = SHIFT_TIMES[type] || []
-    await actions.rosterPatch(staff.id, { shift_type: type, called_in: true, ...(rstart ? { rstart, rend } : {}) })
-    newName.value = ''
-    newQuals.value = []
-  }
-}
 </script>
 
 <template>
@@ -226,24 +207,5 @@ async function addStaff(type) {
         Could not read {{ impRes.bad.length }} row{{ impRes.bad.length > 1 ? 's' : '' }}, for example: {{ impRes.bad.slice(0, 3).join('; ') }}
       </p>
     </template>
-  </details>
-
-  <details class="blk" style="margin-top: 10px">
-    <summary>Add staff member</summary>
-    <p class="muted" style="margin-top: 0; font-size: 14px">
-      Creates the person and calls them in to today's roster straight away -- for covering someone
-      who's out, not for the regular plan, which comes from Import roster above.
-    </p>
-    <div class="addp">
-      <label class="f">Name <input v-model="newName" type="text" autocomplete="off" placeholder="e.g. Alex K" /></label>
-      <div class="meta">Qualified for</div>
-      <div class="skills" role="group" aria-label="Qualifications">
-        <button v-for="q in QUAL_ROLES" :key="q" class="sk" :aria-pressed="newQuals.includes(q)" @click="toggleNewQual(q)">{{ QUAL_LABEL[q] }}</button>
-      </div>
-      <div class="meta">Add and call in as</div>
-      <div class="seg" role="group" aria-label="Call in as">
-        <button v-for="(label, key) in SHIFT_LABEL" :key="key" :class="'sh-' + key" @click="addStaff(key)">{{ label }}</button>
-      </div>
-    </div>
   </details>
 </template>

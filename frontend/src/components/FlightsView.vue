@@ -6,6 +6,10 @@ import jetstarLogo from '../assets/airlines/jetstar.svg'
 import virginLogo from '../assets/airlines/virgin-australia.svg'
 import qatarLogo from '../assets/airlines/qatar.svg'
 import emiratesLogo from '../assets/airlines/emirates.svg'
+import singaporeLogo from '../assets/airlines/singapore.svg'
+import malaysiaLogo from '../assets/airlines/malaysia.svg'
+import chinaSouthernLogo from '../assets/airlines/china-southern.svg'
+import fijiLogo from '../assets/airlines/fiji.svg'
 
 const filter = ref('all')
 const chips = [
@@ -17,7 +21,16 @@ const chips = [
 
 // Airline logo badge, read off the flight number prefix (works even for flights added by
 // hand, which may not have the airline name field filled in).
-const AIRLINE_LOGO = { JQ: jetstarLogo, VA: virginLogo, QR: qatarLogo, EK: emiratesLogo }
+const AIRLINE_LOGO = {
+  JQ: jetstarLogo,
+  VA: virginLogo,
+  QR: qatarLogo,
+  EK: emiratesLogo,
+  SQ: singaporeLogo,
+  MH: malaysiaLogo,
+  CZ: chinaSouthernLogo,
+  FJ: fijiLogo,
+}
 function airlineCode(flightNo) {
   return (flightNo || '').match(/^[A-Za-z]{2,3}/)?.[0]?.toUpperCase()
 }
