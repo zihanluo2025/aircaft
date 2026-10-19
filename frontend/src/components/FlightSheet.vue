@@ -150,7 +150,7 @@ const pickerQuery = ref('')
 const pickerSelected = ref([])
 function openPicker(role) {
   if (role === 'Toilet' && !toiletOptions.value.length) {
-    return toast('Nobody is Toilet today. Set it on the Crew tab.')
+    return toast('Nobody is Toilet today. Set it on the Staff tab.')
   }
   pickerRole.value = role
   pickerQuery.value = ''
