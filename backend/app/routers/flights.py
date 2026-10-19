@@ -150,9 +150,9 @@ def start_cleaning(flight_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="This flight is cancelled")
     if flight.started_at:
         raise HTTPException(status_code=409, detail="Cleaning has already started")
+    # Crew is not required to start: sometimes the clock starts as soon as people begin working the
+    # aircraft, and positions only get filled in afterwards once everyone has settled in.
     holders = fixed_holders(db, flight.work_date, flight.shift)
-    if not holders and not any(a.staff_id for a in flight.assignments):
-        raise HTTPException(status_code=400, detail="Assign at least one person first")
     flight.fixed = holders  # snapshot: later roster edits do not rewrite this record
     flight.started_at = utcnow()
     flight.finished_at = None

@@ -139,7 +139,6 @@ h3{font-family:var(--f-disp);font-size:20px;font-weight:600;margin:0 0 10px}
 .nmactions{display:flex;flex:none;gap:6px;margin-left:auto}
 .btn2.icn{min-height:36px;min-width:36px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-color:transparent;background:none}
 .btn2.icn.armed{background:var(--warn);color:#fff}
-.btn2.icn svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .person .namerow strong{font-size:18px;font-weight:600}
 .skills{display:flex;flex-wrap:wrap;gap:6px}
 .skills.pickgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
@@ -184,7 +183,7 @@ h3{font-family:var(--f-disp);font-size:20px;font-weight:600;margin:0 0 10px}
 .person.off{border-left:6px solid var(--line)}
 .tag.sh-early{background:var(--early)} .tag.sh-late{background:var(--lateS)} .tag.sh-all{background:var(--long)}
 .addp{display:flex;flex-direction:column;gap:10px}
-input[type=text],input[type=time],input[type=date],select,textarea{width:100%;min-height:44px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:8px 10px}
+input[type=text],input[type=password],input[type=time],input[type=date],select,textarea{width:100%;min-height:44px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:8px 10px}
 textarea{min-height:84px;resize:vertical}
 .phototools{display:flex;gap:8px;margin-top:10px}
 .phototool{display:inline-flex;align-items:center;justify-content:center;flex:1;cursor:pointer;text-align:center}

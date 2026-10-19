@@ -77,6 +77,9 @@ function changeRosterTime(field, value) {
       <span v-if="e.rstart || e.rend" class="meta">{{ e.rstart || '--:--' }}&ndash;{{ e.rend || '--:--' }}</span>
       <span v-else></span>
       <div class="nmactions">
+        <button class="btn2" style="min-height: 36px; padding: 0 14px" :aria-expanded="open" @click="open = !open">
+          {{ open ? 'Done' : e.shift_type ? 'Edit' : 'Call in' }}
+        </button>
         <button
           v-if="e.shift_type"
           class="btn2 danger icn"
@@ -85,14 +88,19 @@ function changeRosterTime(field, value) {
           :title="confirmSick ? 'Tap again to confirm' : 'Call sick'"
           @click="callSick"
         >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1.1-.3 1.2.4 2.5.6 3.8.6.6 0 1 .4 1 1v3.5c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.6.6 3.8.1.4 0 .8-.3 1.1L6.6 10.8z"
-            />
+          <svg
+            width="19"
+            height="19"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.2"
+            stroke-linecap="round"
+          >
+            <line x1="12" y1="4.5" x2="12" y2="14.5" />
+            <line x1="12" y1="19" x2="12" y2="19.01" />
           </svg>
-        </button>
-        <button class="btn2" style="min-height: 36px; padding: 0 14px" :aria-expanded="open" @click="open = !open">
-          {{ open ? 'Done' : e.shift_type ? 'Edit' : 'Call in' }}
         </button>
       </div>
     </div>

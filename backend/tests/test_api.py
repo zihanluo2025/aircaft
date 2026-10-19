@@ -122,10 +122,14 @@ def test_flight_lifecycle(client):
     assert "  Signed\n" in report["summary_text"]
 
 
-def test_start_needs_crew(client):
+def test_can_start_before_assigning_crew(client):
+    # Sometimes the clock starts as soon as people begin working the aircraft, and positions only
+    # get filled in afterwards -- starting must not require anyone to already be assigned.
     flight = new_flight(client)
-    response = client.post(f"/api/flights/{flight['id']}/start")
-    assert response.status_code == 400
+    started = client.post(f"/api/flights/{flight['id']}/start")
+    assert started.status_code == 200
+    assert started.json()["status"] == "cleaning"
+    assert started.json()["fixed"] == []
 
 
 def test_signature_needs_finished_flight(client):
