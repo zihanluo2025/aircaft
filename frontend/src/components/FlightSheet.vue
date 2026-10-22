@@ -458,8 +458,9 @@ async function saveSignature() {
               <button v-for="r in presetsToAdd" :key="r" type="button" @click="addRow(r)">+ {{ r }}</button>
             </div>
             <form class="ac-custom" @submit.prevent="addRow()">
-              <input v-model="newRole" type="text" placeholder="Other role or section" aria-label="Role to add" autocomplete="off" />
-              <button type="submit" :disabled="!newRole.trim()">Add role</button>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6v12M6 12h12" /></svg>
+              <input v-model="newRole" type="text" placeholder="Add another role or section" aria-label="Role to add" autocomplete="off" enterkeyhint="done" />
+              <button type="submit" :disabled="!newRole.trim()">Add</button>
             </form>
           </div>
 
@@ -764,31 +765,49 @@ async function saveSignature() {
 .ac-custom {
   display: flex;
   align-items: center;
+  gap: 10px;
   height: 48px;
-  padding: 0 4px 0 12px;
+  padding: 0 6px 0 14px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--bg);
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 .ac-custom:focus-within {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
 }
-.ac-custom input {
+.ac-custom > svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+/* beats the global input[type=text] box style, so the field stays one box, not a box in a box */
+.ac-custom input[type='text'] {
   flex: 1;
   min-width: 0;
+  min-height: 0;
+  height: 100%;
+  padding: 0;
   border: 0;
+  border-radius: 0;
   background: none;
   color: var(--ink);
-  font: inherit;
   font-size: 15px;
   outline: none;
-  padding: 0;
-  min-height: 0;
+  box-shadow: none;
+}
+.ac-custom input[type='text']::placeholder {
+  color: var(--muted);
 }
 .ac-custom button {
-  height: 38px;
-  padding: 0 14px;
+  flex: none;
+  height: 36px;
+  padding: 0 16px;
   border-radius: 8px;
   border: 0;
   background: var(--accent);
@@ -799,8 +818,9 @@ async function saveSignature() {
   cursor: pointer;
 }
 .ac-custom button:disabled {
-  background: var(--line);
+  background: none;
   color: var(--muted);
+  opacity: 0.6;
   cursor: default;
 }
 

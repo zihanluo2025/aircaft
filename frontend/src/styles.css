@@ -252,9 +252,6 @@ td.n{font-variant-numeric:tabular-nums}
 
 /* ---- additions for the Vue version ---- */
 .namerow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.login{max-width:420px;margin:0 auto;padding:56px 20px 40px;display:flex;flex-direction:column;gap:14px}
-.login h1{font-family:var(--f-disp);font-size:44px;font-weight:700;margin:0;line-height:1}
-.login p{margin:0}
 .loading{padding:60px 20px;text-align:center;color:var(--muted)}
 #app{min-height:100vh}
 .syncrow{display:flex;flex-direction:column;align-items:flex-start;gap:6px;margin:0 0 6px}
@@ -268,5 +265,4 @@ td.n{font-variant-numeric:tabular-nums}
   main,.sbody,.top .r1,.top .r2,.tabsinner{max-width:900px}
   .sbar{max-width:900px;margin:0 auto}
   .chips{flex-wrap:wrap;overflow-x:visible;margin:0;padding:2px 0 4px}
-  .login{max-width:460px}
 }
