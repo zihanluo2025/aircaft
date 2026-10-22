@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onUnmounted, ref } from 'vue'
-import { QUAL_LABEL, SHIFT_LABEL, SHIFT_TIMES } from '../constants.js'
+import { QUAL_LABEL, QUAL_ROLES, SHIFT_LABEL, SHIFT_TIMES } from '../constants.js'
 import { hhmm } from '../lib/time.js'
 import { actions, state, toast } from '../store.js'
 import TimeField from './TimeField.vue'
@@ -61,6 +61,12 @@ const undoSick = () => actions.rosterPatch(e.value.staff_id, { sick: false })
 function changeRosterTime(field, value) {
   if (!value) return
   actions.rosterPatch(e.value.staff_id, { [field]: value })
+}
+// Qualifications usually come from the weekly roster import's note column -- this lets a wrong or
+// outdated entry be fixed on the spot instead of needing someone to go edit the database.
+function toggleQual(role) {
+  const quals = e.value.quals.includes(role) ? e.value.quals.filter((q) => q !== role) : [...e.value.quals, role]
+  actions.patchStaff(e.value.staff_id, { quals })
 }
 </script>
 
@@ -130,6 +136,13 @@ function changeRosterTime(field, value) {
         <TimeField label="Indicative end" :model-value="e.rend" @update:model-value="(v) => changeRosterTime('rend', v)" />
       </div>
       <button v-else-if="e.sick_at" class="btn2" style="width: 100%" @click="undoSick">Undo sick</button>
+
+      <div class="meta" style="margin-top: 4px">Qualified for</div>
+      <div class="skills" role="group" :aria-label="'Qualifications for ' + e.name">
+        <button v-for="q in QUAL_ROLES" :key="q" class="sk" :aria-pressed="e.quals.includes(q)" @click="toggleQual(q)">
+          {{ QUAL_LABEL[q] }}
+        </button>
+      </div>
     </template>
   </div>
 </template>
