@@ -9,6 +9,7 @@ import { api } from '../api.js'
 import { FIXED_ROLES, PRESET_ROLES, SHIFT_LABEL, SHIFT_TIMES, STATUS_LABEL } from '../constants.js'
 import { compressImage } from '../lib/image.js'
 import { shortName } from '../lib/names.js'
+import { vFitLine } from '../lib/fitLine.js'
 import { currentShift, fmtElapsed, hasStarted, hhmm, isoFromLocal } from '../lib/time.js'
 import { actions, onDuty, state, toast } from '../store.js'
 import SignaturePad from './SignaturePad.vue'
@@ -409,10 +410,10 @@ async function saveSignature() {
           </p>
           <div v-for="role in FIXED_ROLES" :key="role" class="frow">
             <span class="lbl">{{ role }}</span>
-            <span class="who" :class="{ none: !holders(role).length }">
-              <template v-if="holders(role).length"><span v-for="(n, i) in holders(role)" :key="i">{{ n }}</span></template>
-              <template v-else>Not set. Set it on the Staff tab.</template>
+            <span v-if="holders(role).length" v-fit-line class="who fitline">
+              <span v-for="(n, i) in holders(role)" :key="i">{{ n }}</span>
             </span>
+            <span v-else class="who none">Not set. Set it on the Staff tab.</span>
           </div>
         </section>
 

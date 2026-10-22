@@ -178,9 +178,9 @@ h3{font-family:var(--f-disp);font-size:20px;font-weight:600;margin:0 0 10px}
 .fx span{display:block;font-size:13px;color:var(--muted)}
 .fx b{display:block;font-family:var(--f-disp);font-size:20px;font-weight:600;line-height:1.15;overflow-wrap:anywhere}
 .fx b.none{color:var(--warn);font-family:var(--f-body);font-size:15px;font-weight:600}
-.frow{display:grid;grid-template-columns:104px 1fr;gap:8px;margin-bottom:8px;align-items:baseline}
+.frow{display:grid;grid-template-columns:auto minmax(0,1fr);gap:16px;margin-bottom:8px;align-items:baseline}
 .frow .lbl{font-weight:600;font-size:15px}
-.frow .who{font-weight:600;display:flex;flex-direction:column;gap:2px;min-width:0}
+.frow .who{font-weight:600;text-align:right}
 .frow .who.none{color:var(--warn);font-weight:500}
 .person .meta{font-size:14px;color:var(--muted)}
 .person.off{border-left:6px solid var(--line)}
@@ -243,10 +243,16 @@ tr.rowbtn{cursor:pointer}
 tr.rowbtn:hover,tr.rowbtn:focus-visible{background:color-mix(in srgb, var(--ink) 6%, transparent)}
 tr.rowbtn[aria-expanded="true"]{background:color-mix(in srgb, var(--ink) 6%, transparent)}
 tr.detailrow td{white-space:normal;background:var(--bg)}
-.fcrew{display:flex;flex-direction:column}
+/* width:0 + min-width:100% keeps the names from widening the report table, so they can stack instead */
+.fcrew{display:flex;flex-direction:column;width:0;min-width:100%}
 .fcrewrow{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;font-size:14px;padding:6px 0}
 .fcrewrow + .fcrewrow{border-top:1px solid var(--line)}
-.fcrewrow .names{display:flex;flex-direction:column;align-items:flex-end;gap:2px;text-align:right;min-width:0}
+.fcrewrow .lbl{flex:none}
+/* names: one line when they all fit, otherwise one per line (see lib/fitLine.js) */
+.fitline{display:flex;justify-content:flex-end;flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-align:right}
+.fitline > span:not(:last-child)::after{content:',\00a0'}
+.fitline.stacked{flex-direction:column;align-items:flex-end;gap:2px;white-space:normal}
+.fitline.stacked > span::after{content:none}
 .fcrewrow .lbl{color:var(--muted)}
 td.n{font-variant-numeric:tabular-nums}
 #sumTxt{min-height:150px;font-size:13px;font-family:ui-monospace,Menlo,monospace}

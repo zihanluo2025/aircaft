@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { showImagePreview } from 'vant'
 import { api } from '../api.js'
 import { SHIFT_NAME } from '../constants.js'
+import { vFitLine } from '../lib/fitLine.js'
 import { hhmm } from '../lib/time.js'
 import { actions, state, toast } from '../store.js'
 
@@ -108,7 +109,7 @@ async function exportExcel() {
                   <div v-else class="fcrew">
                     <div v-for="g in f.roles" :key="g.role" class="fcrewrow">
                       <span class="lbl">{{ g.role }}</span>
-                      <span class="names"><span v-for="(n, i) in g.names" :key="i">{{ n }}</span></span>
+                      <span v-fit-line class="names fitline"><span v-for="(n, i) in g.names" :key="i">{{ n }}</span></span>
                     </div>
                   </div>
                   <p v-if="f.started_at" class="muted" style="margin: 8px 0 0; font-size: 13px">
