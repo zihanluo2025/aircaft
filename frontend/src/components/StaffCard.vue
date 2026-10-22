@@ -12,6 +12,7 @@ const props = defineProps({ person: { type: Object, required: true } })
 const e = computed(() => props.person)
 
 const open = ref(false)
+const editTip = computed(() => (open.value ? 'Done' : e.value.shift_type ? 'Edit' : 'Call in'))
 
 // "Amit Kumar - 09367" -> name "Amit Kumar", employee number "09367"
 const displayName = computed(() => e.value.name.replace(/\s-\s*\d+$/, ''))
@@ -100,19 +101,26 @@ function toggleQual(role) {
         <button
           v-if="e.shift_type"
           type="button"
-          class="sc-sick"
+          class="sc-btn sick"
           :class="{ armed: confirmSick }"
           :aria-label="confirmSick ? 'Tap again to confirm call sick' : 'Call sick'"
-          :title="confirmSick ? 'Tap again to confirm' : 'Call sick'"
+          :data-tip="confirmSick ? 'Tap again to confirm' : 'Call sick'"
           @click="callSick"
         >
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v9M12 19h.01" /></svg>
-          <span v-if="confirmSick">Sick?</span>
         </button>
-        <button type="button" class="sc-edit" :class="{ on: open }" :aria-expanded="open" @click="open = !open">
-          <svg v-if="!open && e.shift_type" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4" /></svg>
-          <svg v-else-if="!open" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6v12M6 12h12" /></svg>
-          {{ open ? 'Done' : e.shift_type ? 'Edit' : 'Call in' }}
+        <button
+          type="button"
+          class="sc-btn"
+          :class="{ on: open }"
+          :aria-expanded="open"
+          :aria-label="editTip"
+          :data-tip="editTip"
+          @click="open = !open"
+        >
+          <svg v-if="open" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+          <svg v-else-if="e.shift_type" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4" /></svg>
+          <svg v-else viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6v12M6 12h12" /></svg>
         </button>
       </div>
     </div>
@@ -183,7 +191,6 @@ function toggleQual(role) {
   border-radius: 12px;
   padding: 12px 12px 12px 16px;
   margin-bottom: 8px;
-  overflow: hidden;
 }
 /* shift colour as a slim bar on the left */
 .sc::before {
@@ -193,6 +200,7 @@ function toggleQual(role) {
   top: 0;
   bottom: 0;
   width: 4px;
+  border-radius: 12px 0 0 12px;
   background: var(--tone);
 }
 .sc.sh-early {
@@ -298,54 +306,82 @@ svg {
   align-items: center;
   gap: 6px;
 }
-.sc-edit,
-.sc-sick {
+/* round icon-only buttons, same size and shape; what they do shows as a tooltip */
+.sc-btn {
+  position: relative;
+  flex: none;
+  width: 36px;
   height: 36px;
-  border-radius: 999px;
-  font: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  cursor: pointer;
-}
-.sc-edit {
-  padding: 0 14px 0 12px;
+  padding: 0;
+  border-radius: 50%;
   border: 1px solid var(--line);
   background: var(--bg);
   color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
-.sc-edit svg {
-  width: 16px;
-  height: 16px;
+.sc-btn svg {
+  width: 17px;
+  height: 17px;
 }
-.sc-edit.on {
+.sc-btn:hover {
+  border-color: var(--muted);
+}
+.sc-btn.on {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--on-accent);
-  padding: 0 16px;
 }
-.sc-sick {
-  min-width: 36px;
-  padding: 0 8px;
-  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
-  background: color-mix(in srgb, var(--warn) 10%, transparent);
+.sc-btn.sick {
   color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 40%, transparent);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
 }
-.sc-sick svg {
-  width: 18px;
-  height: 18px;
+.sc-btn.sick svg {
   stroke-width: 2.6;
 }
-.sc-sick.armed {
+.sc-btn.sick:hover {
+  border-color: var(--warn);
+}
+.sc-btn.sick.armed {
   background: var(--warn);
   border-color: var(--warn);
   color: var(--surface);
-  padding: 0 12px 0 8px;
 }
-
+/* tooltip above the button, right-aligned so it never runs off the screen's right edge */
+.sc-btn[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  transform: translateY(4px);
+  padding: 5px 9px;
+  border-radius: 6px;
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s, transform 0.12s;
+  z-index: 2;
+}
+.sc-btn:hover::after,
+.sc-btn:focus-visible::after,
+.sc-btn.sick.armed::after {
+  opacity: 1;
+  transform: none;
+}
+@media (hover: none) {
+  /* on touch screens a tap leaves :hover stuck -- only the armed sick button keeps its tooltip */
+  .sc-btn:hover:not(.armed)::after {
+    opacity: 0;
+  }
+}
 .sc-badges {
   display: flex;
   flex-wrap: wrap;
