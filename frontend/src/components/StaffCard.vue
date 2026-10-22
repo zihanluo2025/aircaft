@@ -86,16 +86,19 @@ function toggleQual(role) {
       <div class="sc-id">
         <div class="sc-name">
           <strong>{{ displayName }}</strong>
-          <span v-if="empNo" class="sc-no">{{ empNo }}</span>
+          <span v-if="empNo" class="sc-no">#{{ empNo }}</span>
         </div>
         <div class="sc-sub">
-          <span v-if="e.shift_type" class="sc-shift">{{ SHIFT_LABEL[e.shift_type] }}</span>
-          <span v-else class="sc-shift off" :class="{ sick: e.sick_at }">{{ e.sick_at ? 'Sick today' : 'Off today' }}</span>
-          <span v-if="e.rstart || e.rend" class="sc-time">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
-            {{ e.rstart || '--:--' }}&ndash;{{ e.rend || '--:--' }}
+          <span class="sc-shift" :class="{ sick: e.sick_at }">
+            <i class="sc-dot" aria-hidden="true"></i>{{ e.shift_type ? SHIFT_LABEL[e.shift_type] : e.sick_at ? 'Sick today' : 'Off today' }}
           </span>
+          <span v-if="e.rstart || e.rend" class="sc-time">{{ e.rstart || '--:--' }}&ndash;{{ e.rend || '--:--' }}</span>
+          <span v-if="e.role" class="sc-badge role">{{ e.role }}</span>
+          <span v-if="e.called_in_at" class="sc-badge call">Call in {{ hhmm(e.called_in_at) }}</span>
+          <span v-if="isChanged && e.planned_type" class="sc-badge chg">Changed</span>
+          <span v-for="q in e.quals" :key="q" class="sc-badge lic">{{ QUAL_LABEL[q] || q }}</span>
         </div>
+        <p v-if="note" class="sc-note">{{ note }}</p>
       </div>
       <div class="sc-actions">
         <button
@@ -124,17 +127,6 @@ function toggleQual(role) {
         </button>
       </div>
     </div>
-
-    <div v-if="e.role || e.called_in_at || (isChanged && e.planned_type) || e.quals.length" class="sc-badges">
-      <span v-if="e.role" class="sc-badge role">{{ e.role }} today</span>
-      <span v-if="e.called_in_at" class="sc-badge call">Call in {{ hhmm(e.called_in_at) }}</span>
-      <span v-if="isChanged && e.planned_type" class="sc-badge chg">Changed</span>
-      <span v-for="q in e.quals" :key="q" class="sc-badge lic">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2" /><path d="M7 10h4M7 14h6" /></svg>
-        {{ QUAL_LABEL[q] || q }}
-      </span>
-    </div>
-    <p v-if="note" class="sc-note">{{ note }}</p>
 
     <div v-if="open" class="sc-edit-panel">
       <div class="sc-sec">{{ e.shift_type ? 'Shift today' : 'Call them in to cover' }}</div>
@@ -183,25 +175,24 @@ function toggleQual(role) {
 </template>
 
 <style scoped>
+/* One row of the grouped staff list (.sc-group in styles.css). */
 .sc {
   --tone: var(--muted);
   position: relative;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 12px 12px 12px 16px;
-  margin-bottom: 8px;
+  padding: 12px 14px;
+  transition: background 0.15s;
 }
-/* shift colour as a slim bar on the left */
-.sc::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 4px;
-  border-radius: 12px 0 0 12px;
-  background: var(--tone);
+.sc + .sc {
+  border-top: 1px solid var(--line);
+}
+.sc:first-child {
+  border-radius: 13px 13px 0 0;
+}
+.sc:last-child {
+  border-radius: 0 0 13px 13px;
+}
+.sc:only-child {
+  border-radius: 13px;
 }
 .sc.sh-early {
   --tone: var(--early);
@@ -212,11 +203,13 @@ function toggleQual(role) {
 .sc.sh-all {
   --tone: var(--long);
 }
-.sc.off {
-  --tone: var(--line);
-}
 .sc.open {
-  border-color: color-mix(in srgb, var(--tone) 55%, var(--line));
+  background: color-mix(in srgb, var(--bg) 55%, var(--surface));
+}
+@media (hover: hover) {
+  .sc:not(.open):hover {
+    background: color-mix(in srgb, var(--bg) 35%, var(--surface));
+  }
 }
 svg {
   fill: none;
@@ -241,8 +234,8 @@ svg {
   justify-content: center;
   font-style: normal;
   font-size: 14px;
-  font-weight: 700;
-  background: color-mix(in srgb, var(--tone) 20%, transparent);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--tone) 18%, transparent);
   color: var(--tone);
 }
 .sc.off .sc-av {
@@ -254,101 +247,131 @@ svg {
   min-width: 0;
 }
 .sc-name {
-  min-width: 0;
   line-height: 1.25;
 }
 .sc-name strong {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
   overflow-wrap: anywhere;
 }
 .sc-no {
-  margin-left: 8px;
-  white-space: nowrap;
+  margin-left: 6px;
   font-size: 13px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .sc-sub {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 4px 10px;
   margin-top: 3px;
   font-size: 13px;
   color: var(--muted);
 }
 .sc-shift {
-  font-weight: 700;
-  color: var(--tone);
-}
-.sc-shift.off {
-  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-weight: 600;
+  color: var(--ink);
+}
+.sc.off .sc-shift {
+  color: var(--muted);
 }
 .sc-shift.sick {
   color: var(--warn);
 }
+.sc-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tone);
+}
+.sc.off .sc-dot {
+  background: var(--line);
+}
+.sc-shift.sick .sc-dot {
+  background: var(--warn);
+}
 .sc-time {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
   font-variant-numeric: tabular-nums;
 }
-.sc-time svg {
-  width: 14px;
-  height: 14px;
+/* small soft-filled labels, no outlines */
+.sc-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--bg);
+  color: var(--muted);
+}
+.sc-badge.role {
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
+  color: var(--ink);
+}
+.sc-badge.call {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+}
+.sc-badge.chg {
+  background: color-mix(in srgb, var(--info) 16%, transparent);
+  color: var(--info);
+}
+.sc-note {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--muted);
 }
 
+/* ghost icon buttons: quiet until hovered or active */
 .sc-actions {
   flex: none;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
 }
-/* round icon-only buttons, same size and shape; what they do shows as a tooltip */
 .sc-btn {
   position: relative;
   flex: none;
   width: 36px;
   height: 36px;
   padding: 0;
-  border-radius: 50%;
-  border: 1px solid var(--line);
-  background: var(--bg);
-  color: var(--ink);
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--muted);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s;
 }
 .sc-btn svg {
-  width: 17px;
-  height: 17px;
+  width: 18px;
+  height: 18px;
 }
 .sc-btn:hover {
-  border-color: var(--muted);
+  background: var(--bg);
+  color: var(--ink);
 }
 .sc-btn.on {
   background: var(--accent);
-  border-color: var(--accent);
   color: var(--on-accent);
-}
-.sc-btn.sick {
-  color: var(--warn);
-  border-color: color-mix(in srgb, var(--warn) 40%, transparent);
-  background: color-mix(in srgb, var(--warn) 10%, transparent);
 }
 .sc-btn.sick svg {
   stroke-width: 2.6;
 }
 .sc-btn.sick:hover {
-  border-color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  color: var(--warn);
 }
 .sc-btn.sick.armed {
   background: var(--warn);
-  border-color: var(--warn);
   color: var(--surface);
 }
 /* tooltip above the button, right-aligned so it never runs off the screen's right edge */
@@ -368,7 +391,7 @@ svg {
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.12s, transform 0.12s;
-  z-index: 2;
+  z-index: 3;
 }
 .sc-btn:hover::after,
 .sc-btn:focus-visible::after,
@@ -381,54 +404,16 @@ svg {
   .sc-btn:hover:not(.armed)::after {
     opacity: 0;
   }
-}
-.sc-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 10px 0 0 52px;
-}
-.sc-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 24px;
-  padding: 0 9px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  border: 1px solid var(--line);
-  color: var(--muted);
-  background: var(--bg);
-}
-.sc-badge svg {
-  width: 14px;
-  height: 14px;
-}
-.sc-badge.role {
-  color: var(--ink);
-  border-color: color-mix(in srgb, var(--ink) 35%, transparent);
-}
-.sc-badge.call {
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-}
-.sc-badge.chg {
-  color: var(--info);
-  border-color: color-mix(in srgb, var(--info) 45%, transparent);
-}
-.sc-note {
-  margin: 8px 0 0 52px;
-  font-size: 13px;
-  color: var(--muted);
+  .sc-btn:hover:not(.on):not(.armed) {
+    background: none;
+    color: var(--muted);
+  }
 }
 
 /* ---- editor ---- */
 .sc-edit-panel {
-  margin-top: 12px;
+  margin: 12px 0 2px 52px;
   padding-top: 4px;
-  border-top: 1px solid var(--line);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -549,14 +534,16 @@ svg {
 }
 
 @media (max-width: 400px) {
-  .sc-badges,
-  .sc-note {
-    margin-left: 0;
+  .sc {
+    padding: 12px;
   }
   .sc-av {
-    width: 34px;
-    height: 34px;
-    font-size: 12px;
+    width: 36px;
+    height: 36px;
+    font-size: 13px;
+  }
+  .sc-edit-panel {
+    margin-left: 0;
   }
   .sc-times {
     gap: 8px;

@@ -161,12 +161,16 @@ function onFile(event) {
     <p>Nobody is on duty yet today. Import a roster, or call someone in under Off today below.</p>
   </div>
   <div v-else-if="!visible.length" class="empty"><p>Nobody in this group.</p></div>
-  <StaffCard v-for="e in visible" :key="e.staff_id" :person="e" />
+  <div v-else class="sc-group">
+    <StaffCard v-for="e in visible" :key="e.staff_id" :person="e" />
+  </div>
 
   <details class="blk offpanel" style="margin-top: 18px">
     <summary>Off today ({{ offDutyList.length }})</summary>
     <p v-if="!offDutyList.length" class="muted" style="margin: 0">Everyone on the team is on duty today.</p>
-    <StaffCard v-for="e in offDutyList" :key="e.staff_id" :person="e" />
+    <div v-else class="sc-group">
+      <StaffCard v-for="e in offDutyList" :key="e.staff_id" :person="e" />
+    </div>
   </details>
 
   <details class="blk" style="margin-top: 10px" :open="importOpen" @toggle="importOpen = $event.target.open">
