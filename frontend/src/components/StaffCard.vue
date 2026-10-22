@@ -13,6 +13,14 @@ const e = computed(() => props.person)
 
 const open = ref(false)
 
+// "Amit Kumar - 09367" -> name "Amit Kumar", employee number "09367"
+const displayName = computed(() => e.value.name.replace(/\s-\s*\d+$/, ''))
+const empNo = computed(() => e.value.name.match(/-\s*(\d+)$/)?.[1] || '')
+const initials = computed(() => {
+  const words = displayName.value.split(/\s+/).filter(Boolean)
+  return words.length ? (words[0][0] + (words.length > 1 ? words[words.length - 1][0] : '')).toUpperCase() : '?'
+})
+
 const hasPlan = computed(() => state.roster.has_plan)
 const isChanged = computed(() => hasPlan.value && !!e.value.shift_type && e.value.planned_type !== e.value.shift_type)
 const note = computed(() => {
@@ -71,55 +79,62 @@ function toggleQual(role) {
 </script>
 
 <template>
-  <div class="card person" :class="e.shift_type ? 'sh-' + e.shift_type : 'off'">
-    <div class="namerow">
-      <strong>{{ e.name }}</strong>
-      <span v-if="e.role" class="tag role">{{ e.role }} today</span>
-      <span v-if="e.called_in_at" class="tag call">Call in</span>
-      <span v-if="e.sick_at" class="tag sick">Sick</span>
-      <span v-if="isChanged && e.planned_type" class="tag chg">Changed</span>
-    </div>
-    <div class="cardrow">
-      <span v-if="e.rstart || e.rend" class="meta">{{ e.rstart || '--:--' }}&ndash;{{ e.rend || '--:--' }}</span>
-      <span v-else></span>
-      <div class="nmactions">
-        <button class="btn2" style="min-height: 36px; padding: 0 14px" :aria-expanded="open" @click="open = !open">
-          {{ open ? 'Done' : e.shift_type ? 'Edit' : 'Call in' }}
-        </button>
+  <div class="sc" :class="[e.shift_type ? 'sh-' + e.shift_type : 'off', { open }]">
+    <div class="sc-top">
+      <i class="sc-av" aria-hidden="true">{{ initials }}</i>
+      <div class="sc-id">
+        <div class="sc-name">
+          <strong>{{ displayName }}</strong>
+          <span v-if="empNo" class="sc-no">{{ empNo }}</span>
+        </div>
+        <div class="sc-sub">
+          <span v-if="e.shift_type" class="sc-shift">{{ SHIFT_LABEL[e.shift_type] }}</span>
+          <span v-else class="sc-shift off" :class="{ sick: e.sick_at }">{{ e.sick_at ? 'Sick today' : 'Off today' }}</span>
+          <span v-if="e.rstart || e.rend" class="sc-time">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+            {{ e.rstart || '--:--' }}&ndash;{{ e.rend || '--:--' }}
+          </span>
+        </div>
+      </div>
+      <div class="sc-actions">
         <button
           v-if="e.shift_type"
-          class="btn2 danger icn"
+          type="button"
+          class="sc-sick"
           :class="{ armed: confirmSick }"
           :aria-label="confirmSick ? 'Tap again to confirm call sick' : 'Call sick'"
           :title="confirmSick ? 'Tap again to confirm' : 'Call sick'"
           @click="callSick"
         >
-          <svg
-            width="19"
-            height="19"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.2"
-            stroke-linecap="round"
-          >
-            <line x1="12" y1="4.5" x2="12" y2="14.5" />
-            <line x1="12" y1="19" x2="12" y2="19.01" />
-          </svg>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v9M12 19h.01" /></svg>
+          <span v-if="confirmSick">Sick?</span>
+        </button>
+        <button type="button" class="sc-edit" :class="{ on: open }" :aria-expanded="open" @click="open = !open">
+          <svg v-if="!open && e.shift_type" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4" /></svg>
+          <svg v-else-if="!open" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6v12M6 12h12" /></svg>
+          {{ open ? 'Done' : e.shift_type ? 'Edit' : 'Call in' }}
         </button>
       </div>
     </div>
-    <div v-if="e.quals.length" class="meta">Qualified: {{ e.quals.map((q) => QUAL_LABEL[q] || q).join(', ') }}</div>
-    <div v-if="e.called_in_at" class="meta">Called in at {{ hhmm(e.called_in_at) }}</div>
-    <div v-if="note" class="meta">{{ note }}</div>
 
-    <template v-if="open">
-      <div class="meta">{{ e.shift_type ? 'Change their shift today' : 'Call them in to cover' }}</div>
-      <div class="seg" role="group" :aria-label="'Shift for ' + e.name">
+    <div v-if="e.role || e.called_in_at || (isChanged && e.planned_type) || e.quals.length" class="sc-badges">
+      <span v-if="e.role" class="sc-badge role">{{ e.role }} today</span>
+      <span v-if="e.called_in_at" class="sc-badge call">Call in {{ hhmm(e.called_in_at) }}</span>
+      <span v-if="isChanged && e.planned_type" class="sc-badge chg">Changed</span>
+      <span v-for="q in e.quals" :key="q" class="sc-badge lic">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2" /><path d="M7 10h4M7 14h6" /></svg>
+        {{ QUAL_LABEL[q] || q }}
+      </span>
+    </div>
+    <p v-if="note" class="sc-note">{{ note }}</p>
+
+    <div v-if="open" class="sc-edit-panel">
+      <div class="sc-sec">{{ e.shift_type ? 'Shift today' : 'Call them in to cover' }}</div>
+      <div class="sc-seg" role="group" :aria-label="'Shift for ' + e.name">
         <button
           v-for="(label, key) in SHIFT_LABEL"
           :key="key"
+          type="button"
           :class="'sh-' + key"
           :aria-pressed="e.shift_type === key"
           @click="changeShift(key)"
@@ -127,22 +142,388 @@ function toggleQual(role) {
           {{ label }}
         </button>
       </div>
-      <button v-if="isChanged && e.planned_type" class="btn2" @click="backToPlan">
+      <button v-if="isChanged && e.planned_type" type="button" class="sc-plan" @click="backToPlan">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5M4 9h10a6 6 0 010 12h-3" /></svg>
         Back to plan: {{ SHIFT_LABEL[e.planned_type] }}
       </button>
 
-      <div v-if="e.shift_type" class="two">
-        <TimeField label="Start" :model-value="e.rstart" @update:model-value="(v) => changeRosterTime('rstart', v)" />
-        <TimeField label="Indicative end" :model-value="e.rend" @update:model-value="(v) => changeRosterTime('rend', v)" />
-      </div>
-      <button v-else-if="e.sick_at" class="btn2" style="width: 100%" @click="undoSick">Undo sick</button>
+      <template v-if="e.shift_type">
+        <div class="sc-sec">Times</div>
+        <div class="sc-times">
+          <TimeField label="Start" :model-value="e.rstart" @update:model-value="(v) => changeRosterTime('rstart', v)" />
+          <TimeField label="Indicative end" :model-value="e.rend" @update:model-value="(v) => changeRosterTime('rend', v)" />
+        </div>
+      </template>
+      <button v-else-if="e.sick_at" type="button" class="sc-plan" @click="undoSick">Undo sick</button>
 
-      <div class="meta" style="margin-top: 4px">Qualified for</div>
-      <div class="skills" role="group" :aria-label="'Qualifications for ' + e.name">
-        <button v-for="q in QUAL_ROLES" :key="q" class="sk" :aria-pressed="e.quals.includes(q)" @click="toggleQual(q)">
+      <div class="sc-sec">Qualified for</div>
+      <div class="sc-quals" role="group" :aria-label="'Qualifications for ' + e.name">
+        <button
+          v-for="q in QUAL_ROLES"
+          :key="q"
+          type="button"
+          class="sc-qual"
+          :aria-pressed="e.quals.includes(q)"
+          @click="toggleQual(q)"
+        >
+          <span class="sc-check" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9" /></svg></span>
           {{ QUAL_LABEL[q] }}
         </button>
       </div>
-    </template>
+    </div>
   </div>
 </template>
+
+<style scoped>
+.sc {
+  --tone: var(--muted);
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 12px 12px 16px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+/* shift colour as a slim bar on the left */
+.sc::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--tone);
+}
+.sc.sh-early {
+  --tone: var(--early);
+}
+.sc.sh-late {
+  --tone: var(--lateS);
+}
+.sc.sh-all {
+  --tone: var(--long);
+}
+.sc.off {
+  --tone: var(--line);
+}
+.sc.open {
+  border-color: color-mix(in srgb, var(--tone) 55%, var(--line));
+}
+svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sc-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sc-av {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-style: normal;
+  font-size: 14px;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--tone) 20%, transparent);
+  color: var(--tone);
+}
+.sc.off .sc-av {
+  color: var(--muted);
+  background: var(--bg);
+}
+.sc-id {
+  flex: 1;
+  min-width: 0;
+}
+.sc-name {
+  min-width: 0;
+  line-height: 1.25;
+}
+.sc-name strong {
+  font-size: 17px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.sc-no {
+  margin-left: 8px;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.sc-sub {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 3px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.sc-shift {
+  font-weight: 700;
+  color: var(--tone);
+}
+.sc-shift.off {
+  color: var(--muted);
+  font-weight: 600;
+}
+.sc-shift.sick {
+  color: var(--warn);
+}
+.sc-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.sc-time svg {
+  width: 14px;
+  height: 14px;
+}
+
+.sc-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sc-edit,
+.sc-sick {
+  height: 36px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.sc-edit {
+  padding: 0 14px 0 12px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+}
+.sc-edit svg {
+  width: 16px;
+  height: 16px;
+}
+.sc-edit.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  padding: 0 16px;
+}
+.sc-sick {
+  min-width: 36px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  color: var(--warn);
+}
+.sc-sick svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.6;
+}
+.sc-sick.armed {
+  background: var(--warn);
+  border-color: var(--warn);
+  color: var(--surface);
+  padding: 0 12px 0 8px;
+}
+
+.sc-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 0 52px;
+}
+.sc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  background: var(--bg);
+}
+.sc-badge svg {
+  width: 14px;
+  height: 14px;
+}
+.sc-badge.role {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--ink) 35%, transparent);
+}
+.sc-badge.call {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.sc-badge.chg {
+  color: var(--info);
+  border-color: color-mix(in srgb, var(--info) 45%, transparent);
+}
+.sc-note {
+  margin: 8px 0 0 52px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* ---- editor ---- */
+.sc-edit-panel {
+  margin-top: 12px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sc-sec {
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+/* segmented control, iOS style: one track, the chosen shift filled in its colour */
+.sc-seg {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+}
+.sc-seg button {
+  height: 40px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sc-seg button:hover:not([aria-pressed='true']) {
+  background: var(--surface);
+}
+.sc-seg button[aria-pressed='true'] {
+  color: var(--on-shift);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+.sc-seg button[aria-pressed='true'].sh-early {
+  background: var(--early);
+}
+.sc-seg button[aria-pressed='true'].sh-late {
+  background: var(--lateS);
+}
+.sc-seg button[aria-pressed='true'].sh-all {
+  background: var(--long);
+}
+.sc-plan {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px dashed var(--line);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sc-plan svg {
+  width: 16px;
+  height: 16px;
+}
+.sc-times {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.sc-quals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.sc-qual {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 14px 0 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.sc-check {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 2px solid var(--line);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: transparent;
+}
+.sc-check svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 3;
+}
+.sc-qual[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.sc-qual[aria-pressed='true'] .sc-check {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+@media (max-width: 400px) {
+  .sc-badges,
+  .sc-note {
+    margin-left: 0;
+  }
+  .sc-av {
+    width: 34px;
+    height: 34px;
+    font-size: 12px;
+  }
+  .sc-times {
+    gap: 8px;
+  }
+}
+</style>

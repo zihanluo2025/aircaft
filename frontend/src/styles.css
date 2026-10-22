@@ -137,39 +137,20 @@ h3{font-family:var(--f-disp);font-size:20px;font-weight:600;margin:0 0 10px}
 
 /* crew list */
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px;margin-bottom:8px}
-.person{display:flex;flex-direction:column;gap:8px}
-.cardrow{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}
-.nmactions{display:flex;flex:none;gap:6px;margin-left:auto}
 .btn2.icn{min-height:36px;min-width:36px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-color:transparent;background:none}
 .btn2.icn.armed{background:var(--warn);color:#fff}
-.person .namerow strong{font-size:18px;font-weight:600}
 .skills{display:flex;flex-wrap:wrap;gap:6px}
 .skills.pickgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
 .skills.pickgrid .sk{min-width:0;min-height:44px;white-space:normal;text-align:center;border-radius:var(--r);padding:8px 12px}
 .sk{border:1px solid var(--line);background:none;border-radius:999px;min-height:34px;padding:0 12px;font-size:14px;color:var(--muted)}
 .sk[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--bg)}
 .sk:disabled{opacity:.4;cursor:default}
-.seg{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
-.seg button{border:0;background:var(--surface);min-height:44px;font-weight:600;border-right:1px solid var(--line)}
-.seg button:last-child{border-right:0}
-.seg button[aria-pressed="true"]{color:var(--on-shift)}
-.seg button[aria-pressed="true"].sh-early{background:var(--early)}
-.seg button[aria-pressed="true"].sh-late{background:var(--lateS)}
-.seg button[aria-pressed="true"].sh-all{background:var(--long)}
-.person.sh-early{border-left:6px solid var(--early)}
-.person.sh-late{border-left:6px solid var(--lateS)}
-.person.sh-all{border-left:6px solid var(--long)}
-.tag{font-size:13px;font-weight:600;border-radius:999px;padding:2px 10px;color:var(--on-shift)}
-.tag.call{background:var(--accent);color:var(--on-accent)}
-.tag.sick{background:var(--warn);color:#fff}
-.tag.role{background:var(--ink);color:var(--bg)}
 .fx button{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:8px 10px;min-width:0;min-height:76px;text-align:left}
 .fx button.on{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
 .fxcount{position:absolute;top:8px;right:10px;font-size:13px;font-weight:700;color:var(--muted)}
 .fx button span{display:block;font-size:13px;color:var(--muted)}
 .fx button small{display:block;font-size:12px;color:var(--muted);margin-top:3px}
 .sk.big{min-height:44px;font-size:16px;padding:0 14px}
-.tag.chg{background:transparent;border:1.5px solid var(--ink);color:var(--ink);padding:0 9px}
 .impres{font-size:14px;margin:10px 0 0}
 .impres.bad{color:var(--warn)}
 #impTxt{min-height:120px;font-size:13px;font-family:ui-monospace,Menlo,monospace}
@@ -182,9 +163,6 @@ h3{font-family:var(--f-disp);font-size:20px;font-weight:600;margin:0 0 10px}
 .frow .lbl{font-weight:600;font-size:15px}
 .frow .who{font-weight:600;text-align:right}
 .frow .who.none{color:var(--warn);font-weight:500}
-.person .meta{font-size:14px;color:var(--muted)}
-.person.off{border-left:6px solid var(--line)}
-.tag.sh-early{background:var(--early)} .tag.sh-late{background:var(--lateS)} .tag.sh-all{background:var(--long)}
 .addp{display:flex;flex-direction:column;gap:10px}
 input[type=text],input[type=password],input[type=time],input[type=date],select,textarea{width:100%;min-height:44px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:8px 10px}
 textarea{min-height:84px;resize:vertical}
@@ -262,7 +240,6 @@ td.n{font-variant-numeric:tabular-nums}
 .foot{margin-top:18px;text-align:center;font-size:13px;color:var(--muted)}
 
 /* ---- additions for the Vue version ---- */
-.namerow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .loading{padding:60px 20px;text-align:center;color:var(--muted)}
 #app{min-height:100vh}
 .syncrow{display:flex;flex-direction:column;align-items:flex-start;gap:6px;margin:0 0 6px}
