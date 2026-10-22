@@ -12,6 +12,7 @@ from ..schemas import ReportFlight, ReportOut, ReportPerson, Shift
 from ..services.domain import (
     SHIFT_TYPE_LABEL,
     STATUS_LABEL,
+    crew_by_role,
     crew_of,
     flight_minutes,
     flight_status,
@@ -59,8 +60,9 @@ def _build_report(db: Session, work_date: Date, shift: str) -> ReportOut:
                 started_at=f.started_at,
                 finished_at=f.finished_at,
                 minutes=flight_minutes(f),
-                crew_count=len(crew),
+                crew_count=len({c["staff_id"] for c in crew}),
                 crew=crew,
+                roles=crew_by_role(crew),
                 signed=bool(f.sig_image),
             )
         )
@@ -70,7 +72,7 @@ def _build_report(db: Session, work_date: Date, shift: str) -> ReportOut:
                 "eta": f.eta,
                 "status_label": STATUS_LABEL[status],
                 "minutes": flight_minutes(f),
-                "crew": [f"{c['staff_name']} ({c['role']})" for c in crew],
+                "crew": [f"{g['role']}: {', '.join(g['names'])}" for g in crew_by_role(crew)],
                 "signed_by": f.sig_name if f.sig_image else "",
                 "notes": f.notes,
             }

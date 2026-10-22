@@ -202,6 +202,11 @@ class FlightDetail(FlightOut):
 
 
 # ---- report ----
+class RoleCrew(BaseModel):
+    role: str
+    names: list[str]
+
+
 class ReportFlight(BaseModel):
     id: int
     flight_no: str
@@ -212,6 +217,7 @@ class ReportFlight(BaseModel):
     minutes: Optional[int]
     crew_count: int
     crew: list[CrewMember]
+    roles: list[RoleCrew]
     signed: bool
 
 

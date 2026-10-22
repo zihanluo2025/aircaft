@@ -73,15 +73,24 @@ def fixed_for(db: Session, f: Flight, live: Optional[list[dict]] = None) -> list
 
 
 def crew_of(f: Flight) -> list[dict]:
-    """Everyone who actually worked this specific flight: the fixed role holders locked in when
-    cleaning started (not just whoever currently holds those roles -- that is a day-wide, not a
-    per-flight, fact, and would otherwise count the same people on every aircraft before anyone has
-    actually been assigned) plus the per aircraft assignments."""
-    crew = list(f.fixed) if f.fixed is not None else []
+    """Everyone assigned on this specific aircraft -- the "On this aircraft" list, in its order.
+    The day-wide Driver/Toilet/Truck snapshot (f.fixed) is not mixed in: it is the same for every
+    flight and would show those people (sometimes twice) on every aircraft in the report."""
+    crew: list[dict] = []
+    seen: set[tuple[str, int]] = set()
     for a in f.assignments:
-        if a.staff_id:
+        if a.staff_id and (a.role, a.staff_id) not in seen:
+            seen.add((a.role, a.staff_id))
             crew.append({"role": a.role, "staff_id": a.staff_id, "staff_name": title_case(a.staff.name) if a.staff else ""})
     return crew
+
+
+def crew_by_role(crew: list[dict]) -> list[dict]:
+    """One row per role, people joined: Toilet: Employee A, Employee B. Keeps first-seen role order."""
+    groups: dict[str, list[str]] = {}
+    for c in crew:
+        groups.setdefault(c["role"], []).append(c["staff_name"])
+    return [{"role": role, "names": names} for role, names in groups.items()]
 
 
 def build_flight_out(db: Session, f: Flight, detail: bool = False, live: Optional[list[dict]] = None) -> dict:

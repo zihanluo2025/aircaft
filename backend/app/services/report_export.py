@@ -36,7 +36,7 @@ def build_report_workbook(report: ReportOut) -> BytesIO:
     for cell in flights_ws[1]:
         cell.font = bold
     for f in report.flights:
-        crew = "; ".join(f"{c.role}: {c.staff_name}" for c in f.crew if c.staff_name)
+        crew = "; ".join(f"{g.role}: {', '.join(g.names)}" for g in f.roles)
         flights_ws.append([f.flight_no, f.eta, f.status, f.minutes, f.crew_count, "Yes" if f.signed else "No", crew])
     flights_ws.column_dimensions["A"].width = 12
     flights_ws.column_dimensions["C"].width = 10

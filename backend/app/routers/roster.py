@@ -162,11 +162,23 @@ def _preview_out(db: Session, parsed: ParsedRoster, shift: str) -> ImportPreview
 
 
 def _apply_parsed(db: Session, parsed: ParsedRoster, shift: str) -> ImportApplyOut:
-    """Replace the roster for every date found in the parsed roster, for the chosen shift's team."""
+    """The new import fully replaces the previous version for the chosen shift's team:
+    - every roster entry from the new roster's first date onward is cleared (dates the new file no
+      longer covers included), then rebuilt from the file; earlier days stay as history for reports;
+    - anyone in the team who is not in the new roster is made inactive, so the Off today list only
+      shows the latest roster's people;
+    - people no longer on duty are taken off unstarted flights from that date onward."""
     if not parsed.days:
         raise HTTPException(status_code=400, detail="No shifts found. Check the layout and try again.")
 
-    by_name = {s.name.lower(): s for s in db.scalars(select(Staff).where(Staff.team == shift))}
+    first_day = min(Date.fromisoformat(day) for day in parsed.days)
+    db.execute(delete(RosterEntry).where(RosterEntry.shift == shift, RosterEntry.work_date >= first_day))
+
+    team = list(db.scalars(select(Staff).where(Staff.team == shift)))
+    for staff in team:
+        if staff.name.lower() not in parsed.people:
+            staff.active = False
+    by_name = {s.name.lower(): s for s in team}
     created = 0
 
     def ensure(name: str) -> Staff:
@@ -182,9 +194,9 @@ def _apply_parsed(db: Session, parsed: ParsedRoster, shift: str) -> ImportApplyO
             staff.active = True
         return staff
 
+    on_duty: set[tuple[Date, int]] = set()
     for day_str, cells in parsed.days.items():
         work_date = Date.fromisoformat(day_str)
-        db.execute(delete(RosterEntry).where(RosterEntry.work_date == work_date, RosterEntry.shift == shift))
         for name, cell in cells.items():
             staff = ensure(name)
             for role in cell["roles"]:
@@ -202,6 +214,22 @@ def _apply_parsed(db: Session, parsed: ParsedRoster, shift: str) -> ImportApplyO
                         rend=cell["rend"],
                     )
                 )
+                on_duty.add((work_date, staff.id))
+
+    # 已经开始清洁的航班不动，只清理还没开始的航班上已不在岗的人
+    stale = db.execute(
+        select(Assignment, Flight.work_date)
+        .join(Flight, Flight.id == Assignment.flight_id)
+        .where(
+            Flight.shift == shift,
+            Flight.work_date >= first_day,
+            Flight.started_at.is_(None),
+            Assignment.staff_id.is_not(None),
+        )
+    ).all()
+    for assignment, work_date in stale:
+        if (work_date, assignment.staff_id) not in on_duty:
+            assignment.staff_id = None
     db.commit()
     return ImportApplyOut(days=len(parsed.days), created_staff=created, shifts=parsed.shifts)
 

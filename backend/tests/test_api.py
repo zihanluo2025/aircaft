@@ -272,21 +272,26 @@ def test_undo_sick(client):
     assert undo["entry"]["sick_at"] is None
 
 
-def test_report_staff_count_only_counts_people_actually_on_that_flight(client):
-    # Driver/Toilet/Truck are day-wide, not per-flight -- before a flight has even started cleaning,
-    # the report's Staff count should not borrow today's current fixed-role holders and show the same
-    # number on every unstarted flight.
+def test_report_only_shows_people_on_this_aircraft_grouped_by_role(client):
+    # Driver/Toilet/Truck are day-wide, not per-flight -- the report lists only the "On this
+    # aircraft" assignments, one row per role, even after the fixed-role snapshot is taken.
     ids = seed_team(client)
     client.patch(f"/api/staff/{ids['Alex K']}", json={"quals": ["Driver"]})
     client.patch(f"/api/roster/{ids['Alex K']}", params=Q, json={"role": "Driver"})
     flight = new_flight(client)
-
-    report = client.get("/api/report", params=Q).json()
-    assert report["flights"][0]["crew_count"] == 0
+    with client.db_session_factory() as db:
+        db.add_all(
+            [
+                Assignment(flight_id=flight["id"], role="Toilet", staff_id=ids["Priya S"], position=10),
+                Assignment(flight_id=flight["id"], role="Toilet", staff_id=ids["Tom W"], position=11),
+            ]
+        )
+        db.commit()
 
     client.post(f"/api/flights/{flight['id']}/start")
-    report = client.get("/api/report", params=Q).json()
-    assert report["flights"][0]["crew_count"] == 1  # Alex K's Driver snapshot, now locked in
+    row = client.get("/api/report", params=Q).json()["flights"][0]
+    assert row["crew_count"] == 2
+    assert row["roles"] == [{"role": "Toilet", "names": ["Priya S", "Tom W"]}]
 
 
 def test_names_are_shown_in_title_case(client):
@@ -357,3 +362,24 @@ def test_report_export_is_a_real_xlsx(client):
     assert flights_rows[0] == ("Flight", "ETA", "Status", "Minutes", "Staff", "Signed", "Crew")
     assert flights_rows[1][0] == "QF 705"
     assert flights_rows[1][2] == "done"
+
+
+def test_reimport_replaces_previous_roster(client):
+    old = "Name,2026-10-13,2026-10-14\nAlex K,All day,Early\nPriya S,Early,Late\n"
+    client.post("/api/roster/import", json={"shift": "morning", "text": old})
+    flight = new_flight(client)
+    priya = next(s["id"] for s in client.get("/api/staff", params={"team": "morning"}).json() if s["name"] == "Priya S")
+    with client.db_session_factory() as db:
+        db.query(Assignment).filter_by(flight_id=flight["id"], position=0).one().staff_id = priya
+        db.commit()
+
+    new = "Name,2026-10-13\nAlex K,Late\nTom W,Early\n"
+    assert client.post("/api/roster/import", json={"shift": "morning", "text": new}).status_code == 200
+
+    roster = client.get("/api/roster", params=Q).json()
+    assert {(e["name"], e["shift_type"]) for e in roster["entries"]} == {("Alex K", "late"), ("Tom W", "early")}
+    # 新文件不再包含的日期也被清空
+    assert client.get("/api/roster", params={"date": "2026-10-14", "shift": "morning"}).json()["entries"] == []
+    # 不在新名单里的人不再出现在员工列表里，也从未开始的航班上撤下
+    assert {s["name"] for s in client.get("/api/staff", params={"team": "morning"}).json()} == {"Alex K", "Tom W"}
+    assert client.get(f"/api/flights/{flight['id']}").json()["assignments"][0]["staff_id"] is None
