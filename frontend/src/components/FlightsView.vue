@@ -98,22 +98,29 @@ function selectChip(key) {
   }
 }
 
-/** Arrivals per hour, so the leading hand can see when aircraft bunch up. */
+/** Arrivals per hour, so the leading hand can see when aircraft bunch up. The Night chart starts
+ * at 15:00 (nobody is cleaning before the first crew starts) and runs past midnight to the end of
+ * the shift, so hours are ordered from the chart's start rather than 0-23. */
+const CHART_FROM = { morning: 6, night: 15 }
 const chart = computed(() => {
-  const flights = state.flights.filter((f) => f.eta && !f.cancelled)
+  const from = CHART_FROM[state.shift] ?? 0
+  const offset = (hour) => (hour - from + 24) % 24
+  const shiftLen = state.shift === 'night' ? 15 : 24 // night chart: 15:00 to 05:59
+  const flights = state.flights.filter((f) => f.eta && !f.cancelled && offset(Number(f.eta.slice(0, 2))) < shiftLen)
   if (!flights.length) return []
   const byHour = {}
   for (const f of flights) {
     const hour = Number(f.eta.slice(0, 2))
     byHour[hour] = (byHour[hour] || 0) + 1
   }
-  const hours = Object.keys(byHour).map(Number)
-  const lo = Math.min(...hours)
-  const hi = Math.max(...hours)
+  const offsets = Object.keys(byHour).map((h) => offset(Number(h)))
+  const lo = Math.min(...offsets)
+  const hi = Math.max(...offsets)
   const max = Math.max(...Object.values(byHour))
   const cols = []
   let peakFound = false
-  for (let hour = lo; hour <= hi; hour++) {
+  for (let o = lo; o <= hi; o++) {
+    const hour = (from + o) % 24
     const n = byHour[hour] || 0
     const peak = !peakFound && n > 0 && n === max
     if (peak) peakFound = true // only the first hour to hit the max is "the" peak, even on a tie
