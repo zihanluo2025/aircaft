@@ -180,7 +180,7 @@ h3{font-family:var(--f-disp);font-size:20px;font-weight:600;margin:0 0 10px}
 .fx b.none{color:var(--warn);font-family:var(--f-body);font-size:15px;font-weight:600}
 .frow{display:grid;grid-template-columns:104px 1fr;gap:8px;margin-bottom:8px;align-items:baseline}
 .frow .lbl{font-weight:600;font-size:15px}
-.frow .who{font-weight:600}
+.frow .who{font-weight:600;display:flex;flex-direction:column;gap:2px;min-width:0}
 .frow .who.none{color:var(--warn);font-weight:500}
 .person .meta{font-size:14px;color:var(--muted)}
 .person.off{border-left:6px solid var(--line)}

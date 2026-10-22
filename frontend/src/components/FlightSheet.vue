@@ -410,7 +410,8 @@ async function saveSignature() {
           <div v-for="role in FIXED_ROLES" :key="role" class="frow">
             <span class="lbl">{{ role }}</span>
             <span class="who" :class="{ none: !holders(role).length }">
-              {{ holders(role).length ? holders(role).join(', ') : 'Not set. Set it on the Staff tab.' }}
+              <template v-if="holders(role).length"><span v-for="(n, i) in holders(role)" :key="i">{{ n }}</span></template>
+              <template v-else>Not set. Set it on the Staff tab.</template>
             </span>
           </div>
         </section>
