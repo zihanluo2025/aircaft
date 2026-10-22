@@ -152,6 +152,6 @@ async function exportExcel() {
     </template>
 
     <p class="foot">Signed in as {{ state.user.display_name || state.user.username }}</p>
-    <div class="two"><button class="btn2" @click="actions.logout()">Sign out</button><span></span></div>
+    <button class="btn2" style="width: 100%; margin-top: 10px" @click="actions.logout()">Sign out</button>
   </template>
 </template>
