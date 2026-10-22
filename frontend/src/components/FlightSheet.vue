@@ -1,15 +1,8 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
-  Button as VanButton,
-  Cell as VanCell,
-  CellGroup as VanCellGroup,
-  Checkbox as VanCheckbox,
-  CheckboxGroup as VanCheckboxGroup,
   Icon as VanIcon,
   Popup as VanPopup,
-  Search as VanSearch,
-  Tag as VanTag,
   showImagePreview,
 } from 'vant'
 import { api } from '../api.js'
@@ -64,23 +57,34 @@ const notStartedYet = computed(() => {
   }
   return late
 })
-const startsTag = (staffId) => (notStartedYet.value.has(staffId) ? ` - starts ${notStartedYet.value.get(staffId)}` : '')
-
-function personOptions() {
-  return onDuty.value.map((e) => {
-    const other = busy.value.get(e.staff_id)
-    const info = [SHIFT_LABEL[e.shift_type] || 'off', e.called_in_at ? 'call in' : null, e.role].filter(Boolean).join(', ')
-    const tag = other ? (other.status === 'cleaning' ? ` - cleaning ${other.no}` : ` - also on ${other.no}`) : ''
-    return {
-      id: e.staff_id,
-      label: `${shortName(e.name)} (${info})${tag}${startsTag(e.staff_id)}`,
-      disabled: assignedIds.value.has(e.staff_id) || notStartedYet.value.has(e.staff_id),
-      fixed: !!e.role,
-    }
-  })
+// One picker row: who, their shift today, and why they can't be picked (or are busy elsewhere).
+function personOption(staffId, name, shiftType, meta, fixed) {
+  const other = busy.value.get(staffId)
+  const start = notStartedYet.value.get(staffId)
+  const here = assignedIds.value.has(staffId)
+  return {
+    id: staffId,
+    name: shortName(name),
+    shiftType,
+    meta,
+    fixed,
+    note: other ? (other.status === 'cleaning' ? `Cleaning ${other.no}` : `Also on ${other.no}`) : '',
+    noteHot: other?.status === 'cleaning',
+    disabled: here || !!start,
+    reason: here ? 'On this aircraft' : start ? `Starts ${start}` : '',
+  }
 }
-const cleanerOptions = computed(() => personOptions().filter((o) => !o.fixed))
-const fixedPersonOptions = computed(() => personOptions().filter((o) => o.fixed))
+function personOptions() {
+  return onDuty.value.map((e) =>
+    personOption(
+      e.staff_id,
+      e.name,
+      e.shift_type,
+      [SHIFT_LABEL[e.shift_type] || 'Off', e.called_in_at ? 'Call in' : null, e.role].filter(Boolean).join(' · '),
+      !!e.role,
+    ),
+  )
+}
 
 // The Toilet section on an aircraft can only be done by whoever holds the Toilet fixed role today,
 // unlike the other sections, which are open to anyone on duty.
@@ -88,13 +92,8 @@ const toiletOptions = computed(() =>
   f.value.fixed
     .filter((x) => x.role === 'Toilet')
     .map((x) => {
-      const other = busy.value.get(x.staff_id)
-      const tag = other ? (other.status === 'cleaning' ? ` - cleaning ${other.no}` : ` - also on ${other.no}`) : ''
-      return {
-        id: x.staff_id,
-        label: `${shortName(x.staff_name)}${tag}${startsTag(x.staff_id)}`,
-        disabled: assignedIds.value.has(x.staff_id) || notStartedYet.value.has(x.staff_id),
-      }
+      const e = onDuty.value.find((d) => d.staff_id === x.staff_id)
+      return personOption(x.staff_id, x.staff_name, e?.shift_type, 'Toilet today', true)
     }),
 )
 
@@ -183,14 +182,34 @@ function openPicker(role) {
   pickerSelected.value = []
   pickerOpen.value = true
 }
-const pickerOptions = computed(() =>
-  pickerRole.value === 'Toilet' ? toiletOptions.value : [...cleanerOptions.value, ...fixedPersonOptions.value],
-)
-const filteredPickerOptions = computed(() => {
+const pickerOptions = computed(() => (pickerRole.value === 'Toilet' ? toiletOptions.value : personOptions()))
+// Sections in the sheet: who can be picked, fixed-role holders (usually busy with that role), and
+// who can't be picked right now, each with the reason.
+const pickerSections = computed(() => {
   const q = pickerQuery.value.trim().toLowerCase()
-  if (!q) return pickerOptions.value
-  return pickerOptions.value.filter((o) => o.label.toLowerCase().includes(q))
+  const items = q ? pickerOptions.value.filter((o) => o.name.toLowerCase().includes(q)) : pickerOptions.value
+  const sections = [
+    { title: pickerRole.value === 'Toilet' ? 'Toilet today' : 'Available', items: items.filter((o) => !o.disabled && (!o.fixed || pickerRole.value === 'Toilet')) },
+    { title: 'On a fixed role today', items: pickerRole.value === 'Toilet' ? [] : items.filter((o) => !o.disabled && o.fixed) },
+    { title: 'Not available', items: items.filter((o) => o.disabled) },
+  ]
+  return sections.filter((x) => x.items.length)
 })
+function togglePick(o) {
+  if (o.disabled) return
+  const i = pickerSelected.value.indexOf(o.id)
+  if (i >= 0) pickerSelected.value.splice(i, 1)
+  else pickerSelected.value.push(o.id)
+}
+const initials = (name) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter((_, i, all) => i === 0 || i === all.length - 1)
+    .map((w) => w[0].toUpperCase())
+    .join('')
+const SHIFT_TONE = { early: 'var(--early)', late: 'var(--lateS)', all: 'var(--long)' }
+const presetsToAdd = computed(() => PRESET_ROLES.filter((r) => !roleGroups.value.some((g) => g.role === r)))
 const pickerSaving = ref(false)
 async function confirmPicker() {
   if (pickerSaving.value) return // a double tap must not send the same add twice
@@ -205,9 +224,10 @@ async function confirmPicker() {
   }
 }
 const newRole = ref('')
-function addRow() {
-  const role = newRole.value.trim()
+function addRow(preset) {
+  const role = (typeof preset === 'string' ? preset : newRole.value).trim()
   if (!role) return toast('Pick or type a role')
+  if (roleGroups.value.some((g) => g.role.toLowerCase() === role.toLowerCase())) return toast(`${role} is already on this aircraft`)
   actions.saveAssignments(f.value.id, [...rowsPayload(), { role, staff_id: null }])
   newRole.value = ''
 }
@@ -403,62 +423,86 @@ async function saveSignature() {
           <p v-if="!onDuty.length" class="muted" style="margin-top: 0">
             Nobody is on today's roster. Add people on the Crew tab first.
           </p>
-          <van-cell-group v-if="roleGroups.length" inset class="rolecells">
-            <van-cell v-for="g in roleGroups" :key="g.role" :title="g.role" center>
-              <template v-if="!peopleIn(g).length" #value>
-                <van-tag plain type="primary" round size="large" class="addtag" @click="openPicker(g.role)">+ Add</van-tag>
-              </template>
-              <template v-if="editingRoles" #right-icon>
-                <van-icon name="cross" size="18" :aria-label="'Remove ' + g.role" @click="removeRoleGroup(g.role)" />
-              </template>
-              <template v-if="peopleIn(g).length || (g.role === 'Toilet' && !toiletOptions.length)" #label>
-                <div v-if="peopleIn(g).length" class="ppl">
-                  <van-tag
-                    v-for="row in peopleIn(g)"
-                    :key="row.index"
-                    type="primary"
-                    round
-                    closeable
-                    size="large"
-                    @close="removePerson(g.role, row.index)"
-                  >
-                    {{ shortName(row.staff_name) }}
-                  </van-tag>
-                  <van-tag plain type="primary" round size="large" class="addtag" @click="openPicker(g.role)">+ Add</van-tag>
+
+          <div v-if="roleGroups.length" class="ac-roles">
+            <div v-for="g in roleGroups" :key="g.role" class="ac-role">
+              <button v-if="editingRoles" type="button" class="ac-del" :aria-label="'Remove ' + g.role" @click="removeRoleGroup(g.role)">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 12h10" /></svg>
+              </button>
+              <div class="ac-main">
+                <div class="ac-head">
+                  <span class="ac-name">{{ g.role }}</span>
+                  <span v-if="peopleIn(g).length" class="ac-count">{{ peopleIn(g).length }}</span>
                 </div>
-                <p v-else class="muted" style="margin: 2px 0 0; font-size: 13px">Nobody is Toilet today. Set it on the Crew tab.</p>
-              </template>
-            </van-cell>
-          </van-cell-group>
-          <div class="addrow">
-            <input v-model="newRole" type="text" list="role-list" placeholder="Role or section" aria-label="Role to add" autocomplete="off" />
-            <datalist id="role-list"><option v-for="p in PRESET_ROLES" :key="p" :value="p"></option></datalist>
-            <button class="btn2" @click="addRow">Add role</button>
+                <div v-if="peopleIn(g).length" class="ac-people">
+                  <span v-for="row in peopleIn(g)" :key="row.index" class="ac-chip">
+                    <i class="ac-av">{{ initials(shortName(row.staff_name)) }}</i>
+                    <span>{{ shortName(row.staff_name) }}</span>
+                    <button type="button" :aria-label="'Remove ' + shortName(row.staff_name)" @click="removePerson(g.role, row.index)">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17" /></svg>
+                    </button>
+                  </span>
+                </div>
+                <p v-else-if="g.role === 'Toilet' && !toiletOptions.length" class="ac-empty">Nobody is Toilet today. Set it on the Staff tab.</p>
+                <p v-else class="ac-empty">No one yet</p>
+              </div>
+              <button v-if="!editingRoles" type="button" class="ac-add" :aria-label="'Add to ' + g.role" @click="openPicker(g.role)">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6v12M6 12h12" /></svg>
+                <span>Add</span>
+              </button>
+            </div>
           </div>
-          <van-popup v-model:show="pickerOpen" position="bottom" round closeable class="pickersheet">
-            <div class="pickerhead">
-              <h3>Add to {{ pickerRole }}</h3>
-              <van-search v-model="pickerQuery" placeholder="Search by name" />
+
+          <div class="ac-newrole">
+            <div v-if="presetsToAdd.length" class="ac-presets">
+              <button v-for="r in presetsToAdd" :key="r" type="button" @click="addRow(r)">+ {{ r }}</button>
             </div>
-            <div class="pickerlist">
-              <p v-if="!filteredPickerOptions.length" class="muted" style="margin: 16px">Nobody matches.</p>
-              <van-checkbox-group v-else v-model="pickerSelected">
-                <van-checkbox
-                  v-for="o in filteredPickerOptions"
-                  :key="o.id"
-                  :name="o.id"
-                  :disabled="o.disabled"
-                  shape="square"
-                  class="pickerrow"
-                >
-                  {{ o.label }}
-                </van-checkbox>
-              </van-checkbox-group>
-            </div>
-            <div class="pickerfoot">
-              <van-button block type="primary" :disabled="!pickerSelected.length || pickerSaving" @click="confirmPicker">
-                {{ pickerSelected.length ? `Add ${pickerSelected.length}` : 'Add' }}
-              </van-button>
+            <form class="ac-custom" @submit.prevent="addRow()">
+              <input v-model="newRole" type="text" placeholder="Other role or section" aria-label="Role to add" autocomplete="off" />
+              <button type="submit" :disabled="!newRole.trim()">Add role</button>
+            </form>
+          </div>
+
+          <van-popup v-model:show="pickerOpen" position="bottom" round teleport="body" class="ac-sheet" safe-area-inset-bottom>
+            <div class="ac-sheet-in">
+              <div class="ac-sheet-head">
+                <button type="button" class="ac-hbtn" @click="pickerOpen = false">Cancel</button>
+                <h3>Add to {{ pickerRole }}</h3>
+                <button type="button" class="ac-hbtn ac-hdone" :disabled="!pickerSelected.length || pickerSaving" @click="confirmPicker">
+                  {{ pickerSelected.length ? `Add ${pickerSelected.length}` : 'Add' }}
+                </button>
+              </div>
+              <label class="ac-search">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></svg>
+                <input v-model="pickerQuery" type="search" placeholder="Search by name" aria-label="Search by name" />
+              </label>
+              <div class="ac-list">
+                <p v-if="!pickerSections.length" class="ac-none">Nobody matches.</p>
+                <template v-for="sec in pickerSections" :key="sec.title">
+                  <div class="ac-sec">{{ sec.title }}</div>
+                  <button
+                    v-for="o in sec.items"
+                    :key="o.id"
+                    type="button"
+                    class="ac-row"
+                    :class="{ on: pickerSelected.includes(o.id) }"
+                    :disabled="o.disabled"
+                    :aria-pressed="pickerSelected.includes(o.id)"
+                    @click="togglePick(o)"
+                  >
+                    <i class="ac-av lg" :style="{ '--tone': SHIFT_TONE[o.shiftType] || 'var(--muted)' }">{{ initials(o.name) }}</i>
+                    <span class="ac-who">
+                      <b>{{ o.name }}</b>
+                      <small>{{ o.meta }}</small>
+                    </span>
+                    <span v-if="o.reason" class="ac-badge">{{ o.reason }}</span>
+                    <span v-else-if="o.note" class="ac-badge" :class="{ hot: o.noteHot }">{{ o.note }}</span>
+                    <span v-if="!o.disabled" class="ac-check" aria-hidden="true">
+                      <svg viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9" /></svg>
+                    </span>
+                  </button>
+                </template>
+              </div>
             </div>
           </van-popup>
         </section>
@@ -529,3 +573,406 @@ async function saveSignature() {
     </div>
   </div>
 </template>
+
+<!-- Same visual language as TimeField: 10px radius, --bg filled inputs, accent highlights.
+     Global (not scoped) because the picker sheet is teleported to <body>. -->
+<style>
+.ac-roles {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+.ac-role {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--surface);
+}
+.ac-role + .ac-role {
+  border-top: 1px solid var(--line);
+}
+.ac-main {
+  flex: 1;
+  min-width: 0;
+}
+.ac-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ac-name {
+  font-weight: 600;
+  font-size: 15px;
+}
+.ac-count {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.ac-empty {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.ac-people {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.ac-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 4px 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg);
+  font-size: 14px;
+  font-weight: 500;
+  max-width: 100%;
+}
+.ac-chip > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ac-chip button {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex: none;
+}
+.ac-chip button:hover {
+  background: var(--line);
+}
+.ac-av {
+  --tone: var(--accent);
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: color-mix(in srgb, var(--tone) 22%, transparent);
+  color: var(--tone);
+}
+.ac-av.lg {
+  width: 36px;
+  height: 36px;
+  font-size: 13px;
+}
+.ac-roles svg,
+.ac-sheet svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ac-add {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 34px;
+  padding: 0 12px 0 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ac-del {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--warn);
+  color: var(--surface);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.ac-del svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 3;
+}
+.ac-chip svg {
+  width: 18px;
+  height: 18px;
+  color: var(--muted);
+}
+.ac-newrole {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ac-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ac-presets button {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px dashed var(--line);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.ac-presets button:hover {
+  color: var(--ink);
+  border-color: var(--muted);
+}
+.ac-custom {
+  display: flex;
+  align-items: center;
+  height: 48px;
+  padding: 0 4px 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+}
+.ac-custom:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.ac-custom input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  outline: none;
+  padding: 0;
+  min-height: 0;
+}
+.ac-custom button {
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 0;
+  background: var(--accent);
+  color: var(--on-accent);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ac-custom button:disabled {
+  background: var(--line);
+  color: var(--muted);
+  cursor: default;
+}
+
+/* picker sheet */
+.ac-sheet {
+  background: var(--surface);
+  color: var(--ink);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+.ac-sheet-in {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+}
+.ac-sheet-head {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 8px 8px 0;
+}
+.ac-sheet-head h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ac-hbtn {
+  justify-self: start;
+  background: none;
+  border: 0;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 15px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.ac-hdone {
+  justify-self: end;
+  color: var(--accent);
+  font-weight: 700;
+}
+.ac-hdone:disabled {
+  color: var(--muted);
+  opacity: 0.6;
+  cursor: default;
+}
+.ac-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  margin: 10px 16px 6px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--muted);
+}
+.ac-search:focus-within {
+  border-color: var(--accent);
+}
+.ac-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  outline: none;
+  padding: 0;
+  min-height: 0;
+}
+.ac-list {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  padding: 0 8px 12px;
+}
+.ac-sec {
+  padding: 14px 8px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.ac-none {
+  margin: 24px 8px;
+  text-align: center;
+  color: var(--muted);
+}
+.ac-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ac-row:hover:not(:disabled) {
+  background: var(--bg);
+}
+.ac-row.on {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.ac-row:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.ac-who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ac-who b {
+  font-weight: 600;
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ac-who small {
+  font-size: 13px;
+  color: var(--muted);
+}
+.ac-badge {
+  flex: none;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.ac-badge.hot {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 50%, transparent);
+}
+.ac-check {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: transparent;
+}
+.ac-row.on .ac-check {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+.ac-check svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 3;
+}
+</style>

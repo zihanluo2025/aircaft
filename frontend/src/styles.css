@@ -217,16 +217,6 @@ details.blk[open] summary{margin-bottom:10px}
 .detfield{display:flex;flex-direction:column;gap:2px;min-width:0}
 .detfield .lbl{font-size:13px;color:var(--muted)}
 .detfield b{font-size:15px;font-weight:600;overflow-wrap:anywhere}
-.addrow{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:6px}
-.rolecells{margin:0 0 10px}
-.ppl{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:4px}
-.addtag{cursor:pointer}
-.pickersheet{display:flex;flex-direction:column;max-height:80vh}
-.pickerhead{padding:16px 16px 0}
-.pickerhead h3{margin:0 0 8px}
-.pickerlist{overflow-y:auto;flex:1;min-height:0}
-.pickerrow{width:100%;padding:12px 16px;border-bottom:1px solid var(--line)}
-.pickerfoot{padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line)}
 .clock{font-family:var(--f-disp);font-size:56px;font-weight:600;text-align:center;line-height:1.1;margin:2px 0 10px;font-variant-numeric:tabular-nums}
 .clock.done{color:var(--ok)}
 .times{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
