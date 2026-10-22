@@ -3,6 +3,10 @@
 - https://turnaround.luozihan.space/
 
 A mobile-first web app for an aircraft cabin cleaning leading hand. It tracks who is working a shift, who does which job on which aircraft, how long each aircraft took, and the cabin crew's signature. Several phones share the same data.
+<img width="2880" height="1556" alt="image" src="https://github.com/user-attachments/assets/66456146-2c5a-4e42-beb4-2233d613924d" />
+<img width="2880" height="1556" alt="image" src="https://github.com/user-attachments/assets/b7468642-99fb-47ea-bb42-5550d014484f" />
+
+
 
 
 ## Stack
