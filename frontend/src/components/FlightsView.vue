@@ -62,40 +62,32 @@ function toggleHour(hour) {
   mixFilter.value = null // mix and hour filters are mutually exclusive
 }
 
-// The mix/hour filters narrow the pool before the status chips split it up, so a chip's count
-// always matches what tapping it actually shows -- no "(2)" that only reveals 1 because another
-// filter is still active underneath.
-const filtered = computed(() => {
-  let items = state.flights
+// The status chips (All / Upcoming / Cleaning / Done) always count the whole shift, whatever
+// Intl/JQ/VA or hour filter is on. Tapping one clears those other filters, so the list it shows
+// still matches its count.
+const STATUS_PREDICATES = {
+  all: () => true,
+  upcoming: (f) => ['sched', 'landed'].includes(f.status),
+  cleaning: (f) => f.status === 'cleaning',
+  done: (f) => f.status === 'done',
+}
+const list = computed(() => {
+  let items = state.flights.filter(STATUS_PREDICATES[filter.value] || STATUS_PREDICATES.all)
   if (mixFilter.value) items = items.filter(MIX_PREDICATES[mixFilter.value])
   if (hourFilter.value !== null) items = items.filter((f) => f.eta && Number(f.eta.slice(0, 2)) === hourFilter.value)
   return items
 })
-const groups = computed(() => {
-  const all = filtered.value
-  return {
-    all,
-    upcoming: all.filter((f) => ['sched', 'landed'].includes(f.status)),
-    cleaning: all.filter((f) => f.status === 'cleaning'),
-    done: all.filter((f) => f.status === 'done'),
-  }
-})
-const list = computed(() => groups.value[filter.value] || groups.value.all)
-
-// All always shows the day's total, whatever filter is on, and tapping it clears the mix/hour
-// filters so it really shows everything again.
 function chipCount(key) {
-  return key === 'all' ? state.flights.length : groups.value[key].length
+  return state.flights.filter(STATUS_PREDICATES[key]).length
 }
+// A chip only looks selected while it alone decides the list.
 function chipPressed(key) {
-  return filter.value === key && (key !== 'all' || (!mixFilter.value && hourFilter.value === null))
+  return filter.value === key && !mixFilter.value && hourFilter.value === null
 }
 function selectChip(key) {
   filter.value = key
-  if (key === 'all') {
-    mixFilter.value = null
-    hourFilter.value = null
-  }
+  mixFilter.value = null
+  hourFilter.value = null
 }
 
 /** Arrivals per hour, so the leading hand can see when aircraft bunch up. The Night chart starts
