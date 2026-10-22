@@ -107,7 +107,8 @@ async function exportExcel() {
                   <p v-if="!f.crew.length" class="muted" style="margin: 0">Nobody was assigned to this flight.</p>
                   <div v-else class="fcrew">
                     <div v-for="g in f.roles" :key="g.role" class="fcrewrow">
-                      <span class="lbl">{{ g.role }}</span><span>{{ g.names.join(', ') }}</span>
+                      <span class="lbl">{{ g.role }}</span>
+                      <span class="names"><span v-for="(n, i) in g.names" :key="i">{{ n }}</span></span>
                     </div>
                   </div>
                   <p v-if="f.started_at" class="muted" style="margin: 8px 0 0; font-size: 13px">
