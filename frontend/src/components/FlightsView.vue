@@ -82,6 +82,22 @@ const groups = computed(() => {
 })
 const list = computed(() => groups.value[filter.value] || groups.value.all)
 
+// All always shows the day's total, whatever filter is on, and tapping it clears the mix/hour
+// filters so it really shows everything again.
+function chipCount(key) {
+  return key === 'all' ? state.flights.length : groups.value[key].length
+}
+function chipPressed(key) {
+  return filter.value === key && (key !== 'all' || (!mixFilter.value && hourFilter.value === null))
+}
+function selectChip(key) {
+  filter.value = key
+  if (key === 'all') {
+    mixFilter.value = null
+    hourFilter.value = null
+  }
+}
+
 /** Arrivals per hour, so the leading hand can see when aircraft bunch up. */
 const chart = computed(() => {
   const flights = state.flights.filter((f) => f.eta && !f.cancelled)
@@ -145,8 +161,8 @@ const dataNote = computed(() => {
 <template>
   <div class="toolbar">
     <div class="chips" style="flex: 1; margin: 0; padding: 0">
-      <button v-for="c in chips" :key="c[0]" class="chip" :aria-pressed="filter === c[0]" @click="filter = c[0]">
-        {{ c[1] }} ({{ groups[c[0]].length }})
+      <button v-for="c in chips" :key="c[0]" class="chip" :aria-pressed="chipPressed(c[0])" @click="selectChip(c[0])">
+        {{ c[1] }} ({{ chipCount(c[0]) }})
       </button>
     </div>
     <button

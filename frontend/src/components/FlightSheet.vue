@@ -13,10 +13,10 @@ import {
   showImagePreview,
 } from 'vant'
 import { api } from '../api.js'
-import { FIXED_ROLES, PRESET_ROLES, SHIFT_LABEL, STATUS_LABEL } from '../constants.js'
+import { FIXED_ROLES, PRESET_ROLES, SHIFT_LABEL, SHIFT_TIMES, STATUS_LABEL } from '../constants.js'
 import { compressImage } from '../lib/image.js'
 import { shortName } from '../lib/names.js'
-import { fmtElapsed, hhmm, isoFromLocal } from '../lib/time.js'
+import { currentShift, fmtElapsed, hasStarted, hhmm, isoFromLocal } from '../lib/time.js'
 import { actions, onDuty, state, toast } from '../store.js'
 import SignaturePad from './SignaturePad.vue'
 import TimeField from './TimeField.vue'
@@ -50,6 +50,22 @@ const busy = computed(() => {
 // Each role/section can now hold more than one person, so options are no longer scoped to a single
 // row -- a person already on this flight anywhere just can't be picked again.
 const assignedIds = computed(() => new Set(f.value.assignments.filter((a) => a.staff_id).map((a) => a.staff_id)))
+
+// On the shift that is running right now (Adelaide time), someone whose start time has not come yet
+// cannot be picked. Their start is today's roster time, so moving it earlier on the Staff tab makes
+// them pickable straight away. Past and future shifts are not limited.
+const notStartedYet = computed(() => {
+  const cur = currentShift(now.value)
+  const late = new Map()
+  if (cur.date !== f.value.work_date || cur.shift !== f.value.shift) return late
+  for (const e of onDuty.value) {
+    const start = e.rstart || (f.value.shift === 'night' ? SHIFT_TIMES[e.shift_type]?.[0] : '')
+    if (start && !hasStarted(start, f.value.shift, cur.minutes)) late.set(e.staff_id, start)
+  }
+  return late
+})
+const startsTag = (staffId) => (notStartedYet.value.has(staffId) ? ` - starts ${notStartedYet.value.get(staffId)}` : '')
+
 function personOptions() {
   return onDuty.value.map((e) => {
     const other = busy.value.get(e.staff_id)
@@ -57,8 +73,8 @@ function personOptions() {
     const tag = other ? (other.status === 'cleaning' ? ` - cleaning ${other.no}` : ` - also on ${other.no}`) : ''
     return {
       id: e.staff_id,
-      label: `${shortName(e.name)} (${info})${tag}`,
-      disabled: assignedIds.value.has(e.staff_id),
+      label: `${shortName(e.name)} (${info})${tag}${startsTag(e.staff_id)}`,
+      disabled: assignedIds.value.has(e.staff_id) || notStartedYet.value.has(e.staff_id),
       fixed: !!e.role,
     }
   })
@@ -76,8 +92,8 @@ const toiletOptions = computed(() =>
       const tag = other ? (other.status === 'cleaning' ? ` - cleaning ${other.no}` : ` - also on ${other.no}`) : ''
       return {
         id: x.staff_id,
-        label: `${shortName(x.staff_name)}${tag}`,
-        disabled: assignedIds.value.has(x.staff_id),
+        label: `${shortName(x.staff_name)}${tag}${startsTag(x.staff_id)}`,
+        disabled: assignedIds.value.has(x.staff_id) || notStartedYet.value.has(x.staff_id),
       }
     }),
 )

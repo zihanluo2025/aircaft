@@ -26,3 +26,22 @@ test('isoFromLocal and hhmm round trip in any time zone', () => {
 test('hhmm of nothing is empty', () => {
   assert.equal(hhmm(null), '')
 })
+
+test('currentShift uses Adelaide time, early hours belong to the previous night', async () => {
+  const { currentShift } = await import('../src/lib/time.js')
+  // 2026-10-22 08:50 UTC = 19:20 ACDT
+  assert.deepEqual(currentShift(Date.UTC(2026, 9, 22, 8, 50)), { date: '2026-10-22', shift: 'night', minutes: 19 * 60 + 20 })
+  // 2026-10-22 22:00 UTC = 08:30 ACDT on the 23rd
+  assert.equal(currentShift(Date.UTC(2026, 9, 22, 22, 0)).shift, 'morning')
+  // 2026-10-22 15:00 UTC = 01:30 ACDT on the 23rd -> night of the 22nd
+  assert.deepEqual(currentShift(Date.UTC(2026, 9, 22, 15, 0)), { date: '2026-10-22', shift: 'night', minutes: 90 })
+})
+
+test('hasStarted counts from the shift start, across midnight', async () => {
+  const { hasStarted } = await import('../src/lib/time.js')
+  assert.equal(hasStarted('19:50', 'night', 18 * 60 + 20), false)
+  assert.equal(hasStarted('15:50', 'night', 18 * 60 + 20), true)
+  assert.equal(hasStarted('19:50', 'night', 19 * 60 + 50), true)
+  assert.equal(hasStarted('23:30', 'night', 60), true) // 01:00 is after a 23:30 start
+  assert.equal(hasStarted('00:30', 'night', 23 * 60), false)
+})
