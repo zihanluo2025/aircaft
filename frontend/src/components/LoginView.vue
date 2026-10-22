@@ -25,11 +25,7 @@ async function submit() {
 <template>
   <div class="lg">
     <form class="lg-card" novalidate @submit.prevent="submit">
-      <div class="lg-mark" aria-hidden="true">
-        <svg viewBox="0 0 24 24"><path d="M2.5 13.5l8-2.2V5a1.5 1.5 0 013 0v6.3l8 2.2v2l-8-1.6v4.3l2.5 1.8v1.5L12 20.5l-4 1V20l2.5-1.8v-4.3l-8 1.6z" /></svg>
-      </div>
       <h1>Turnaround</h1>
-      <p class="lg-sub">Sign in to see today's flights and crew.</p>
 
       <label class="lg-field">
         <span class="lg-label">Username</span>

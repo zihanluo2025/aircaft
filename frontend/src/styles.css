@@ -39,7 +39,10 @@
 }
 :root[data-shift="night"] .top .date{color-scheme:dark}
 :root:not([data-shift="night"]) .top .date{color-scheme:light}
+/* safety net: nothing may make the whole page scroll sideways on a phone (clip, unlike hidden, keeps sticky headers working) */
+html,body{overflow-x:clip;max-width:100%}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
+img,svg,video,canvas{max-width:100%}
 *,*::before,*::after{box-sizing:inherit}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.35;-webkit-text-size-adjust:100%}
 body.lock{overflow:hidden}
@@ -51,9 +54,9 @@ button{cursor:pointer}
 .top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--hdr);color:var(--on-hdr);padding:10px 14px 12px;display:flex;flex-direction:column;gap:10px}
 .top .r1,.top .r2{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;max-width:640px;width:100%;margin:0 auto}
 .top h1{font-family:var(--f-disp);font-weight:700;font-size:28px;letter-spacing:.5px;margin:0;line-height:1}
-.top .date{margin-top:0;background:transparent;border:1px solid color-mix(in srgb,var(--on-hdr) 45%,transparent);border-radius:var(--r);color:var(--on-hdr);padding:6px 8px;min-height:36px}
+.top .date{flex:1 1 auto;width:auto;min-width:0;margin-top:0;background:transparent;border:1px solid color-mix(in srgb,var(--on-hdr) 45%,transparent);border-radius:var(--r);color:var(--on-hdr);padding:6px 8px;min-height:36px}
 .stats{display:flex;gap:18px}
-.shiftsw{display:grid;grid-template-columns:1fr 1fr;border:1px solid color-mix(in srgb,var(--on-hdr) 45%,transparent);border-radius:var(--r);overflow:hidden;min-width:200px}
+.shiftsw{display:grid;grid-template-columns:1fr 1fr;border:1px solid color-mix(in srgb,var(--on-hdr) 45%,transparent);border-radius:var(--r);overflow:hidden;flex:none}
 .shiftsw button{border:0;background:transparent;color:var(--on-hdr);min-height:40px;padding:0 14px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px}
 .shiftsw svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 .shiftsw button[aria-pressed="true"]{background:var(--on-hdr);color:var(--hdr)}
@@ -261,6 +264,27 @@ td.n{font-variant-numeric:tabular-nums}
 .allogo img{display:block;height:13px;width:auto}
 
 /* ---- wider screens: mobile-first, but don't strand desktop in a phone-width column ---- */
+/* ---- small phones (iPhone SE/mini, many Androids): keep the header on one screen width ---- */
+@media (max-width:400px){
+  .top{padding:10px 12px 12px}
+  .top .r1,.top .r2{gap:8px}
+  .top h1{font-size:24px}
+  .stats{gap:12px}
+  .stats b{font-size:22px}
+  .shiftsw button{padding:0 10px;gap:4px}
+  main,.sbody{padding-left:10px;padding-right:10px}
+  .chips{margin:0 -10px;padding-left:10px;padding-right:10px}
+  .strip{grid-template-columns:58px minmax(0,1fr) auto;gap:8px;padding:10px}
+  .strip .t b{font-size:24px}
+  .strip .m strong{font-size:20px;white-space:nowrap}
+  .strip .m span{font-size:13px}
+  .strip .r em{font-size:13px}
+}
+@media (max-width:340px){
+  .shiftsw svg{display:none}
+  .stats span{font-size:11px}
+}
+
 @media (min-width:860px){
   main,.sbody,.top .r1,.top .r2,.tabsinner{max-width:900px}
   .sbar{max-width:900px;margin:0 auto}
