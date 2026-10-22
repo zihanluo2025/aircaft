@@ -83,6 +83,8 @@ def delete_flight(flight_id: int, db: Session = Depends(get_db)):
 @router.put("/{flight_id}/assignments", response_model=FlightOut)
 def put_assignments(flight_id: int, items: list[AssignmentIn], db: Session = Depends(get_db)):
     """Replace the per aircraft jobs. People newly added must be on duty and not busy on another aircraft."""
+    # 锁住这架航班，两个同时到达的保存请求排队执行，否则都会"先清空再插入"，留下重复的人
+    db.execute(select(Flight.id).where(Flight.id == flight_id).with_for_update())
     flight = _load(db, flight_id)
 
     seen: set[int] = set()

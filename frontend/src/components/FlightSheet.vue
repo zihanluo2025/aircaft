@@ -126,22 +126,32 @@ const peopleIn = (g) => g.rows.filter((r) => r.staff_id)
 
 const rowsPayload = () => f.value.assignments.map((a) => ({ role: a.role, staff_id: a.staff_id }))
 
-async function addPerson(role, staffId) {
-  if (!staffId) return
-
-  const other = busy.value.get(staffId)
-  if (other && other.status === 'cleaning') {
-    const name = shortName((onDuty.value.find((e) => e.staff_id === staffId) || {}).name || 'This person')
-    if (!confirm(`${name} is currently cleaning ${other.no}. Move them to ${role} here instead?`)) return
-    const freed = await freeFromOtherFlight(other.id, staffId)
-    if (freed === undefined) return
+// Everyone picked in one go is saved in a single request, built after any moves off other
+// aircraft have finished -- several overlapping saves of the whole list used to race on the server
+// and leave the same person on the aircraft twice.
+async function addPeople(role, staffIds) {
+  const accepted = []
+  for (const staffId of staffIds) {
+    const other = busy.value.get(staffId)
+    if (other && other.status === 'cleaning') {
+      const name = shortName((onDuty.value.find((e) => e.staff_id === staffId) || {}).name || 'This person')
+      if (!confirm(`${name} is currently cleaning ${other.no}. Move them to ${role} here instead?`)) continue
+      const freed = await freeFromOtherFlight(other.id, staffId)
+      if (freed === undefined) continue
+    }
+    accepted.push(staffId)
   }
 
   const rows = rowsPayload()
-  const emptyIndex = rows.findIndex((r) => r.role === role && !r.staff_id)
-  if (emptyIndex >= 0) rows[emptyIndex].staff_id = staffId
-  else rows.push({ role, staff_id: staffId })
-  actions.saveAssignments(f.value.id, rows)
+  let changed = false
+  for (const staffId of accepted) {
+    if (rows.some((r) => r.staff_id === staffId)) continue
+    const emptyIndex = rows.findIndex((r) => r.role === role && !r.staff_id)
+    if (emptyIndex >= 0) rows[emptyIndex].staff_id = staffId
+    else rows.push({ role, staff_id: staffId })
+    changed = true
+  }
+  if (changed) await actions.saveAssignments(f.value.id, rows)
 }
 function removePerson(role, index) {
   const rows = rowsPayload()
@@ -181,12 +191,17 @@ const filteredPickerOptions = computed(() => {
   if (!q) return pickerOptions.value
   return pickerOptions.value.filter((o) => o.label.toLowerCase().includes(q))
 })
+const pickerSaving = ref(false)
 async function confirmPicker() {
+  if (pickerSaving.value) return // a double tap must not send the same add twice
+  pickerSaving.value = true
   const role = pickerRole.value
-  const ids = pickerSelected.value
+  const ids = [...pickerSelected.value]
   pickerOpen.value = false
-  for (const id of ids) {
-    await addPerson(role, id)
+  try {
+    await addPeople(role, ids)
+  } finally {
+    pickerSaving.value = false
   }
 }
 const newRole = ref('')
@@ -441,7 +456,7 @@ async function saveSignature() {
               </van-checkbox-group>
             </div>
             <div class="pickerfoot">
-              <van-button block type="primary" :disabled="!pickerSelected.length" @click="confirmPicker">
+              <van-button block type="primary" :disabled="!pickerSelected.length || pickerSaving" @click="confirmPicker">
                 {{ pickerSelected.length ? `Add ${pickerSelected.length}` : 'Add' }}
               </van-button>
             </div>
