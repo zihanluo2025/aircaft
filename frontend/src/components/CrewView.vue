@@ -1,8 +1,9 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { FIXED_ROLES, LICENCE_REQUIRED_ROLES, SHIFT_LABEL, SHIFT_NAME, SHIFT_ORDER } from '../constants.js'
+import { FIXED_ROLES, LICENCE_REQUIRED_ROLES, QUAL_LABEL, SHIFT_LABEL, SHIFT_NAME, SHIFT_ORDER } from '../constants.js'
 import { shortName } from '../lib/names.js'
 import { actions, onDuty, state, toast } from '../store.js'
+import PeoplePicker from './PeoplePicker.vue'
 import StaffCard from './StaffCard.vue'
 
 const filter = ref('every')
@@ -49,7 +50,8 @@ const groups = computed(() => {
     late: all.filter((e) => e.shift_type === 'late'),
     all: all.filter((e) => e.shift_type === 'all'),
     call: all.filter((e) => e.called_in_at),
-    sick: all.filter((e) => e.sick_at),
+    // calling someone sick takes them off duty, so look across the whole team, not just on duty
+    sick: everyone.value.filter((e) => e.sick_at),
     changed: all.filter(isChanged),
   }
 })
@@ -71,7 +73,49 @@ const visible = computed(() => groups.value[chips.value.some((c) => c[0] === fil
 const holders = (role) => onDuty.value.filter((e) => e.role === role).map((e) => shortName(e.name))
 const eligible = (role) =>
   LICENCE_REQUIRED_ROLES.includes(role) ? onDuty.value.filter((e) => e.quals.includes(role)) : onDuty.value
-const toggleRole = (e, role) => actions.rosterPatch(e.staff_id, { role: e.role === role ? null : role })
+
+// Choosing who holds a fixed role uses the same people sheet as the Flights page: today's holders
+// start ticked, and Save applies the difference (adds and removals) in one go.
+const pickOpen = ref(false)
+const pickSelected = ref([])
+const pickSaving = ref(false)
+function openRole(role) {
+  pickRole.value = role
+  pickSelected.value = onDuty.value.filter((e) => e.role === role).map((e) => e.staff_id)
+  pickOpen.value = true
+}
+const pickOptions = computed(() => {
+  const role = pickRole.value
+  if (!role) return []
+  const needsLicence = LICENCE_REQUIRED_ROLES.includes(role)
+  return onDuty.value.map((e) => {
+    const reason =
+      e.role && e.role !== role ? `${e.role} today` : needsLicence && !e.quals.includes(role) ? `No ${QUAL_LABEL[role] || role}` : ''
+    return {
+      id: e.staff_id,
+      name: shortName(e.name),
+      shiftType: e.shift_type,
+      meta: [SHIFT_LABEL[e.shift_type], e.rstart && e.rend ? `${e.rstart}–${e.rend}` : ''].filter(Boolean).join(' · '),
+      disabled: !!reason,
+      reason,
+      section: reason ? 'Not available' : needsLicence ? 'Qualified' : 'On duty',
+    }
+  })
+})
+async function saveRole() {
+  if (pickSaving.value) return
+  pickSaving.value = true
+  const role = pickRole.value
+  const want = new Set(pickSelected.value)
+  const have = new Set(onDuty.value.filter((e) => e.role === role).map((e) => e.staff_id))
+  pickOpen.value = false
+  try {
+    for (const id of want) if (!have.has(id)) await actions.rosterPatch(id, { role })
+    for (const id of have) if (!want.has(id)) await actions.rosterPatch(id, { role: null })
+  } finally {
+    pickSaving.value = false
+  }
+}
 
 // ---- roster import ----
 const impFile = ref(null) // an .xlsx File goes to the server as-is; anything else is read as text
@@ -115,9 +159,8 @@ function onFile(event) {
     <button
       v-for="role in FIXED_ROLES"
       :key="role"
-      :class="{ on: pickRole === role }"
-      :aria-expanded="pickRole === role"
-      @click="pickRole = pickRole === role ? null : role"
+      :class="{ on: pickOpen && pickRole === role }"
+      @click="openRole(role)"
     >
       <span v-if="holders(role).length" class="fxcount">{{ holders(role).length }}</span>
       <span>{{ role }}</span>
@@ -125,29 +168,19 @@ function onFile(event) {
       <small>{{ eligible(role).length }} {{ LICENCE_REQUIRED_ROLES.includes(role) ? 'qualified in' : 'on duty' }}</small>
     </button>
   </div>
-  <div v-if="pickRole" class="card" style="margin-top: 8px">
-    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 8px">
-      <div class="meta" style="font-size: 14px">
-        Who is {{ pickRole }} today? {{ LICENCE_REQUIRED_ROLES.includes(pickRole) ? 'Qualified people on duty:' : 'Anyone on duty:' }}
-      </div>
-      <button class="btn2" style="min-height: 36px; padding: 0 14px; flex: none" @click="pickRole = null">Done</button>
-    </div>
-    <p v-if="!eligible(pickRole).length" class="muted" style="margin: 0 0 10px">
-      {{ LICENCE_REQUIRED_ROLES.includes(pickRole) ? `Nobody on duty is qualified for ${pickRole}. Set qualifications below.` : 'Nobody is on duty yet.' }}
-    </p>
-    <div v-else class="skills pickgrid">
-      <button
-        v-for="e in eligible(pickRole)"
-        :key="e.staff_id"
-        class="sk big"
-        :aria-pressed="e.role === pickRole"
-        :disabled="!!e.role && e.role !== pickRole"
-        @click="toggleRole(e, pickRole)"
-      >
-        {{ shortName(e.name) }} ({{ SHIFT_LABEL[e.shift_type] }}{{ e.role && e.role !== pickRole ? ', ' + e.role + ' today' : '' }})
-      </button>
-    </div>
-  </div>
+  <PeoplePicker
+    v-model:show="pickOpen"
+    v-model="pickSelected"
+    :title="`Who is ${pickRole} today?`"
+    :options="pickOptions"
+    :section-order="['Qualified', 'On duty', 'Not available']"
+    confirm-text="Save"
+    allow-empty
+    :saving="pickSaving"
+    @confirm="saveRole"
+  >
+    <template #empty><p class="pp-none">Nobody is on duty yet. Import a roster or call someone in first.</p></template>
+  </PeoplePicker>
 
   <h2>On duty today ({{ onDutyList.length }})</h2>
   <div class="chips" role="group" aria-label="Filter">

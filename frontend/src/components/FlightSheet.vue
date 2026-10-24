@@ -1,10 +1,6 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import {
-  Icon as VanIcon,
-  Popup as VanPopup,
-  showImagePreview,
-} from 'vant'
+import { Icon as VanIcon, showImagePreview } from 'vant'
 import { api } from '../api.js'
 import { FIXED_ROLES, PRESET_ROLES, SHIFT_LABEL, SHIFT_TIMES, STATUS_LABEL } from '../constants.js'
 import { compressImage } from '../lib/image.js'
@@ -12,6 +8,7 @@ import { shortName } from '../lib/names.js'
 import { vFitLine } from '../lib/fitLine.js'
 import { currentShift, fmtElapsed, hasStarted, hhmm, isoFromLocal } from '../lib/time.js'
 import { actions, onDuty, state, toast } from '../store.js'
+import PeoplePicker from './PeoplePicker.vue'
 import SignaturePad from './SignaturePad.vue'
 import TimeField from './TimeField.vue'
 
@@ -172,36 +169,24 @@ function removeRoleGroup(role) {
 const editingRoles = ref(false)
 const pickerOpen = ref(false)
 const pickerRole = ref('')
-const pickerQuery = ref('')
 const pickerSelected = ref([])
 function openPicker(role) {
   if (role === 'Toilet' && !toiletOptions.value.length) {
     return toast('Nobody is Toilet today. Set it on the Staff tab.')
   }
   pickerRole.value = role
-  pickerQuery.value = ''
   pickerSelected.value = []
   pickerOpen.value = true
 }
-const pickerOptions = computed(() => (pickerRole.value === 'Toilet' ? toiletOptions.value : personOptions()))
 // Sections in the sheet: who can be picked, fixed-role holders (usually busy with that role), and
 // who can't be picked right now, each with the reason.
-const pickerSections = computed(() => {
-  const q = pickerQuery.value.trim().toLowerCase()
-  const items = q ? pickerOptions.value.filter((o) => o.name.toLowerCase().includes(q)) : pickerOptions.value
-  const sections = [
-    { title: pickerRole.value === 'Toilet' ? 'Toilet today' : 'Available', items: items.filter((o) => !o.disabled && (!o.fixed || pickerRole.value === 'Toilet')) },
-    { title: 'On a fixed role today', items: pickerRole.value === 'Toilet' ? [] : items.filter((o) => !o.disabled && o.fixed) },
-    { title: 'Not available', items: items.filter((o) => o.disabled) },
-  ]
-  return sections.filter((x) => x.items.length)
+const pickerOptions = computed(() => {
+  const toilet = pickerRole.value === 'Toilet'
+  return (toilet ? toiletOptions.value : personOptions()).map((o) => ({
+    ...o,
+    section: o.disabled ? 'Not available' : toilet ? 'Toilet today' : o.fixed ? 'On a fixed role today' : 'Available',
+  }))
 })
-function togglePick(o) {
-  if (o.disabled) return
-  const i = pickerSelected.value.indexOf(o.id)
-  if (i >= 0) pickerSelected.value.splice(i, 1)
-  else pickerSelected.value.push(o.id)
-}
 const initials = (name) =>
   name
     .split(/\s+/)
@@ -209,7 +194,6 @@ const initials = (name) =>
     .filter((_, i, all) => i === 0 || i === all.length - 1)
     .map((w) => w[0].toUpperCase())
     .join('')
-const SHIFT_TONE = { early: 'var(--early)', late: 'var(--lateS)', all: 'var(--long)' }
 const presetsToAdd = computed(() => PRESET_ROLES.filter((r) => !roleGroups.value.some((g) => g.role === r)))
 const pickerSaving = ref(false)
 async function confirmPicker() {
@@ -466,48 +450,16 @@ async function saveSignature() {
             </form>
           </div>
 
-          <van-popup v-model:show="pickerOpen" position="bottom" round teleport="body" class="ac-sheet" safe-area-inset-bottom>
-            <div class="ac-sheet-in">
-              <div class="ac-sheet-head">
-                <button type="button" class="ac-hbtn" @click="pickerOpen = false">Cancel</button>
-                <h3>Add to {{ pickerRole }}</h3>
-                <button type="button" class="ac-hbtn ac-hdone" :disabled="!pickerSelected.length || pickerSaving" @click="confirmPicker">
-                  {{ pickerSelected.length ? `Add ${pickerSelected.length}` : 'Add' }}
-                </button>
-              </div>
-              <label class="ac-search">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></svg>
-                <input v-model="pickerQuery" type="search" placeholder="Search by name" aria-label="Search by name" />
-              </label>
-              <div class="ac-list">
-                <p v-if="!pickerSections.length" class="ac-none">Nobody matches.</p>
-                <template v-for="sec in pickerSections" :key="sec.title">
-                  <div class="ac-sec">{{ sec.title }}</div>
-                  <button
-                    v-for="o in sec.items"
-                    :key="o.id"
-                    type="button"
-                    class="ac-row"
-                    :class="{ on: pickerSelected.includes(o.id) }"
-                    :disabled="o.disabled"
-                    :aria-pressed="pickerSelected.includes(o.id)"
-                    @click="togglePick(o)"
-                  >
-                    <i class="ac-av lg" :style="{ '--tone': SHIFT_TONE[o.shiftType] || 'var(--muted)' }">{{ initials(o.name) }}</i>
-                    <span class="ac-who">
-                      <b>{{ o.name }}</b>
-                      <small>{{ o.meta }}</small>
-                    </span>
-                    <span v-if="o.reason" class="ac-badge">{{ o.reason }}</span>
-                    <span v-else-if="o.note" class="ac-badge" :class="{ hot: o.noteHot }">{{ o.note }}</span>
-                    <span v-if="!o.disabled" class="ac-check" aria-hidden="true">
-                      <svg viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9" /></svg>
-                    </span>
-                  </button>
-                </template>
-              </div>
-            </div>
-          </van-popup>
+          <PeoplePicker
+            v-model:show="pickerOpen"
+            v-model="pickerSelected"
+            :title="`Add to ${pickerRole}`"
+            :options="pickerOptions"
+            :section-order="['Toilet today', 'Available', 'On a fixed role today', 'Not available']"
+            :confirm-text="pickerSelected.length ? `Add ${pickerSelected.length}` : 'Add'"
+            :saving="pickerSaving"
+            @confirm="confirmPicker"
+          />
         </section>
 
         <section class="blk">
@@ -577,8 +529,7 @@ async function saveSignature() {
   </div>
 </template>
 
-<!-- Same visual language as TimeField: 10px radius, --bg filled inputs, accent highlights.
-     Global (not scoped) because the picker sheet is teleported to <body>. -->
+<!-- Same visual language as TimeField: 10px radius, --bg filled inputs, accent highlights. -->
 <style>
 .ac-roles {
   display: flex;
@@ -684,13 +635,7 @@ async function saveSignature() {
   background: color-mix(in srgb, var(--tone) 22%, transparent);
   color: var(--tone);
 }
-.ac-av.lg {
-  width: 36px;
-  height: 36px;
-  font-size: 13px;
-}
-.ac-roles svg,
-.ac-sheet svg {
+.ac-roles svg {
   width: 16px;
   height: 16px;
   fill: none;
@@ -826,175 +771,4 @@ async function saveSignature() {
   cursor: default;
 }
 
-/* picker sheet */
-.ac-sheet {
-  background: var(--surface);
-  color: var(--ink);
-  max-height: 85vh;
-  display: flex;
-  flex-direction: column;
-}
-.ac-sheet-in {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  flex: 1;
-  width: 100%;
-  max-width: 640px;
-  margin: 0 auto;
-}
-.ac-sheet-head {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  padding: 8px 8px 0;
-}
-.ac-sheet-head h3 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-.ac-hbtn {
-  justify-self: start;
-  background: none;
-  border: 0;
-  padding: 10px 12px;
-  font: inherit;
-  font-size: 15px;
-  color: var(--muted);
-  cursor: pointer;
-}
-.ac-hdone {
-  justify-self: end;
-  color: var(--accent);
-  font-weight: 700;
-}
-.ac-hdone:disabled {
-  color: var(--muted);
-  opacity: 0.6;
-  cursor: default;
-}
-.ac-search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 42px;
-  margin: 10px 16px 6px;
-  padding: 0 12px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: var(--bg);
-  color: var(--muted);
-}
-.ac-search:focus-within {
-  border-color: var(--accent);
-}
-.ac-search input {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  background: none;
-  color: var(--ink);
-  font: inherit;
-  font-size: 15px;
-  outline: none;
-  padding: 0;
-  min-height: 0;
-}
-.ac-list {
-  overflow-y: auto;
-  flex: 1;
-  min-height: 0;
-  padding: 0 8px 12px;
-}
-.ac-sec {
-  padding: 14px 8px 6px;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-}
-.ac-none {
-  margin: 24px 8px;
-  text-align: center;
-  color: var(--muted);
-}
-.ac-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 8px;
-  border: 0;
-  border-radius: 10px;
-  background: none;
-  color: var(--ink);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.ac-row:hover:not(:disabled) {
-  background: var(--bg);
-}
-.ac-row.on {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-}
-.ac-row:disabled {
-  cursor: default;
-  opacity: 0.55;
-}
-.ac-who {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-.ac-who b {
-  font-weight: 600;
-  font-size: 15px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ac-who small {
-  font-size: 13px;
-  color: var(--muted);
-}
-.ac-badge {
-  flex: none;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  color: var(--muted);
-}
-.ac-badge.hot {
-  color: var(--warn);
-  border-color: color-mix(in srgb, var(--warn) 50%, transparent);
-}
-.ac-check {
-  flex: none;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  border: 2px solid var(--line);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: transparent;
-}
-.ac-row.on .ac-check {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--on-accent);
-}
-.ac-check svg {
-  width: 14px;
-  height: 14px;
-  stroke-width: 3;
-}
 </style>
