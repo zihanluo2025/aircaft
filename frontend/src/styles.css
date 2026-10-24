@@ -46,6 +46,12 @@ img,svg,video,canvas{max-width:100%}
 *,*::before,*::after{box-sizing:inherit}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.35;-webkit-text-size-adjust:100%}
 body.lock{overflow:hidden}
+/* one scrollbar style everywhere (page, sheets, lists): thin, in the theme's line colour */
+*{scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--line);border-radius:999px;border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:var(--muted);background-clip:padding-box}
 button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
 :focus-visible{outline:3px solid var(--info);outline-offset:2px}
