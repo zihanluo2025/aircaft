@@ -22,9 +22,14 @@ export const vFitLine = {
       check(el)
     })
     el._fitObserver.observe(el)
+    el._fitText = el.textContent
     check(el)
   },
   updated(el) {
+    // the parent re-renders often (e.g. a ticking clock); measuring forces a layout, so skip it
+    // unless the names themselves changed
+    if (el.textContent === el._fitText) return
+    el._fitText = el.textContent
     check(el)
   },
   unmounted(el) {

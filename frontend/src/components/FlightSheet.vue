@@ -46,7 +46,7 @@ const assignedIds = computed(() => new Set(f.value.assignments.filter((a) => a.s
 // cannot be picked. Their start is today's roster time, so moving it earlier on the Staff tab makes
 // them pickable straight away. Past and future shifts are not limited.
 const notStartedYet = computed(() => {
-  const cur = currentShift(now.value)
+  const cur = currentShift(nowMinute.value * 60000)
   const late = new Map()
   if (cur.date !== f.value.work_date || cur.shift !== f.value.shift) return late
   for (const e of onDuty.value) {
@@ -219,6 +219,8 @@ function addRow(preset) {
 
 // ---- timing ----
 const now = ref(Date.now())
+// Changes once a minute, so things that only care about the minute don't recompute every second.
+const nowMinute = computed(() => Math.floor(now.value / 60000))
 let ticker = null
 onMounted(() => {
   document.body.classList.add('lock')
@@ -744,7 +746,7 @@ async function saveSignature() {
   border-radius: 0;
   background: none;
   color: var(--ink);
-  font-size: 15px;
+  font-size: 16px; /* under 16px, iOS zooms the whole page in on focus and leaves it zoomed */
   outline: none;
   box-shadow: none;
 }

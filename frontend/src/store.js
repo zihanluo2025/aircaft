@@ -160,7 +160,21 @@ export const actions = {
     const ok = await run(() => api.flights.remove(id), 'Flight deleted')
     if (ok) state.openFlightId = null
   },
-  saveAssignments: (id, rows) => run(() => api.flights.setAssignments(id, rows)),
+  // The save returns the updated flight -- put it on screen at once rather than waiting for the
+  // full reload (staff + roster + every flight) to come back, which made each add feel slow.
+  async saveAssignments(id, rows) {
+    try {
+      const flight = await api.flights.setAssignments(id, rows)
+      const i = state.flights.findIndex((x) => x.id === id)
+      if (i >= 0 && flight) state.flights[i] = { ...state.flights[i], ...flight }
+      refreshAll({ silent: true })
+      return flight ?? true
+    } catch (error) {
+      if (error.status !== 401) toast(error.message)
+      await refreshAll({ silent: true })
+      return undefined
+    }
+  },
   startFlight: (id) => run(() => api.flights.start(id)),
   async finishFlight(id) {
     const flight = await run(() => api.flights.finish(id))
