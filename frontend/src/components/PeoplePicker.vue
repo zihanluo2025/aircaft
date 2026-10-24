@@ -142,6 +142,7 @@ const SHIFT_TONE = { early: 'var(--early)', late: 'var(--lateS)', all: 'var(--lo
   margin: 0 auto;
 }
 .pp-sheet-head {
+  flex: none;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
@@ -176,10 +177,11 @@ const SHIFT_TONE = { early: 'var(--early)', late: 'var(--lateS)', all: 'var(--lo
 .pp-search {
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 42px;
+  flex: none; /* the sheet is a flex column: a long list must not squash the search box */
+  gap: 10px;
+  height: 48px;
   margin: 10px 16px 6px;
-  padding: 0 12px;
+  padding: 0 14px;
   border-radius: 10px;
   border: 1px solid var(--line);
   background: var(--bg);
@@ -187,6 +189,11 @@ const SHIFT_TONE = { early: 'var(--early)', late: 'var(--lateS)', all: 'var(--lo
 }
 .pp-search:focus-within {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.pp-search svg {
+  width: 18px;
+  height: 18px;
 }
 .pp-search input {
   flex: 1;
@@ -195,10 +202,11 @@ const SHIFT_TONE = { early: 'var(--early)', late: 'var(--lateS)', all: 'var(--lo
   background: none;
   color: var(--ink);
   font: inherit;
-  font-size: 15px;
+  font-size: 16px; /* 16px stops iOS zooming in on focus */
   outline: none;
   padding: 0;
   min-height: 0;
+  height: 100%;
 }
 .pp-list {
   overflow-y: auto;
