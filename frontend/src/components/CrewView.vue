@@ -89,9 +89,10 @@ const pickOptions = computed(() => {
   const role = pickRole.value
   if (!role) return []
   const needsLicence = LICENCE_REQUIRED_ROLES.includes(role)
-  return onDuty.value.map((e) => {
-    const reason =
-      e.role && e.role !== role ? `${e.role} today` : needsLicence && !e.quals.includes(role) ? `No ${QUAL_LABEL[role] || role}` : ''
+  // For a licence role (Driver), people without the licence aren't listed at all.
+  const pool = needsLicence ? onDuty.value.filter((e) => e.quals.includes(role)) : onDuty.value
+  return pool.map((e) => {
+    const reason = e.role && e.role !== role ? `${e.role} today` : ''
     return {
       id: e.staff_id,
       name: shortName(e.name),
@@ -228,7 +229,15 @@ async function downloadTemplate() {
     :saving="pickSaving"
     @confirm="saveRole"
   >
-    <template #empty><p class="pp-none">Nobody is on duty yet. Import a roster or call someone in first.</p></template>
+    <template #empty>
+      <p class="pp-none">
+        {{
+          onDuty.length && LICENCE_REQUIRED_ROLES.includes(pickRole)
+            ? `Nobody on duty holds the ${QUAL_LABEL[pickRole] || pickRole}. Add it on their card below.`
+            : 'Nobody is on duty yet. Import a roster or call someone in first.'
+        }}
+      </p>
+    </template>
   </PeoplePicker>
 
   <h2>On duty today ({{ onDutyList.length }})</h2>

@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.models import Assignment, Flight
-from app.services.domain import DEFAULT_ROLES
+from app.services.domain import DOMESTIC_ROLES
 
 DAY = "2026-10-13"
 Q = {"date": DAY, "shift": "morning"}
@@ -23,7 +23,7 @@ def new_flight(client, number="QF 705", sched="05:50"):
     go straight to the database, the same way the sync job does, and read the result back through the API."""
     with client.db_session_factory() as db:
         flight = Flight(work_date=date.fromisoformat(DAY), shift="morning", flight_no=number, sched=sched, eta=sched)
-        flight.assignments = [Assignment(role=role, position=i) for i, role in enumerate(DEFAULT_ROLES)]
+        flight.assignments = [Assignment(role=role, position=i) for i, role in enumerate(DOMESTIC_ROLES)]
         db.add(flight)
         db.commit()
         flight_id = flight.id
@@ -97,7 +97,7 @@ def test_flight_lifecycle(client):
     client.patch(f"/api/roster/{ids['Alex K']}", params=Q, json={"role": "Driver"})
     flight = new_flight(client)
     assert flight["status"] == "sched"
-    assert len(flight["assignments"]) == len(DEFAULT_ROLES)
+    assert len(flight["assignments"]) == len(DOMESTIC_ROLES)
 
     # the Driver fixed role counts as crew, so cleaning can start
     started = client.post(f"/api/flights/{flight['id']}/start")

@@ -216,3 +216,29 @@ def test_only_listed_airlines_are_kept_and_unlisted_untouched_rows_removed(clien
     body = sync(client).json()
     assert body["removed"] == 1
     assert {f["flight_no"] for f in flights(client)} == {"NZ 261", "CZ 313"}
+
+
+def test_new_flights_get_the_layout_for_their_kind_and_old_untouched_layouts_upgrade(client, fake):
+    from app.database import get_db
+    from app.models import Assignment, Flight
+    from app.services.domain import DOMESTIC_ROLES, INTERNATIONAL_ROLES, LEGACY_DEFAULT_ROLES
+
+    http = fake([rec("1", "100"), rec("2", "400", iata="SQ", icao="SIA", origin="WSSS")])
+    sync(client)
+    roles = {f["flight_no"]: [a["role"] for a in f["assignments"]] for f in flights(client)}
+    assert roles["JQ 100"] == DOMESTIC_ROLES
+    assert roles["SQ 400"] == INTERNATIONAL_ROLES
+    assert roles["SQ 400"][0] == "Leading Hand"
+
+    # a flight synced before this change, still on the old layout and untouched
+    db = next(app.dependency_overrides[get_db]())
+    try:
+        old = db.query(Flight).filter_by(flight_no="SQ 400").one()
+        old.assignments = [Assignment(role=r, position=i) for i, r in enumerate(LEGACY_DEFAULT_ROLES)]
+        db.commit()
+    finally:
+        db.close()
+    _clear_throttle(client)
+    sync(client)
+    roles = {f["flight_no"]: [a["role"] for a in f["assignments"]] for f in flights(client)}
+    assert roles["SQ 400"] == INTERNATIONAL_ROLES

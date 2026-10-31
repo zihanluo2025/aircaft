@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..models import Assignment, Flight
-from .domain import DEFAULT_ROLES
+from .domain import LEGACY_DEFAULT_ROLES, default_roles
 from .flight_data import FlightFilter, ProviderFlight, apply_filter, in_window
 
 
@@ -55,8 +55,8 @@ def sync_shift(
                 sched=pf.sched.strftime("%H:%M"),
                 eta=pf.eta.strftime("%H:%M"),
             )
-            row.assignments = [Assignment(role=role, position=i) for i, role in enumerate(DEFAULT_ROLES)]
             _copy_details(row, pf)
+            row.assignments = _default_assignments(row.international)
             db.add(row)
             existing[pf.flight_no] = row
             result.created += 1
@@ -68,6 +68,9 @@ def sync_shift(
         row.sched = pf.sched.strftime("%H:%M")
         row.eta = pf.eta.strftime("%H:%M")
         _copy_details(row, pf)
+        # still on the old one-size layout and nobody assigned yet: give it this aircraft's layout
+        if _untouched(row) and [a.role for a in row.assignments] == LEGACY_DEFAULT_ROLES:
+            row.assignments = _default_assignments(row.international)
         if before != (row.sched, row.eta, row.gate, row.rego, row.landed, row.cancelled, row.origin, row.airline):
             result.updated += 1
 
@@ -80,6 +83,10 @@ def sync_shift(
 
     db.commit()
     return result
+
+
+def _default_assignments(international: bool) -> list[Assignment]:
+    return [Assignment(role=role, position=i) for i, role in enumerate(default_roles(international))]
 
 
 def _airline_of(flight_no: str) -> str:

@@ -17,7 +17,27 @@ LICENCE_REQUIRED_ROLES = {"Driver"}
 STATUS_LABEL = {"sched": "Scheduled", "landed": "Landed", "cleaning": "Cleaning", "done": "Done", "cancelled": "Cancelled"}
 SHIFT_ORDER = {"early": 0, "late": 1, "all": 2}
 SHIFT_TYPE_LABEL = {"early": "Early", "late": "Late", "all": "All day"}
-DEFAULT_ROLES = ["Business", "Vacuum", "Economy - Front", "Economy - Mid", "Economy - Rear", "Toilet", "Leading Hand"]
+# Positions a newly synced flight starts with, in this order. International aircraft are larger.
+INTERNATIONAL_ROLES = [
+    "Leading Hand",
+    "Toilet",
+    "Business",
+    "Vacuum",
+    "Economy - Front Y1",
+    "Economy - Front Y2",
+    "Economy - Front Y3",
+    "Economy - Back Y1",
+    "Economy - Back Y2",
+    "Economy - Back Y3",
+    "Galley",
+]
+DOMESTIC_ROLES = ["Leading Hand", "Toilet", "Business", "Vacuum", "Galley", "Seats"]
+# What every flight used to start with -- an untouched flight still on this list is moved to the new one.
+LEGACY_DEFAULT_ROLES = ["Business", "Vacuum", "Economy - Front", "Economy - Mid", "Economy - Rear", "Toilet", "Leading Hand"]
+
+
+def default_roles(international: bool) -> list[str]:
+    return INTERNATIONAL_ROLES if international else DOMESTIC_ROLES
 
 
 def title_case(name: str) -> str:
