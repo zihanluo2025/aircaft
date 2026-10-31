@@ -168,3 +168,23 @@ def test_flight_data_requires_login(client):
 
     anonymous = TestClient(app)
     assert anonymous.get("/api/flight-data/status").status_code == 401
+
+
+def test_excluded_airline_is_dropped_even_when_international_and_untouched_rows_removed(client, fake, monkeypatch):
+    from app.config import settings
+    from app.models import Flight
+
+    # an old QF row from before the exclusion, one nobody touched and one with notes on it
+    monkeypatch.setattr(settings, "flight_exclude_airlines", [])
+    http = fake([rec("1", "176", iata="QF", icao="QFA", origin="NZAA"), rec("2", "177", iata="QF", icao="QFA", origin="NZAA")])
+    sync(client)
+    ids = {f["flight_no"]: f["id"] for f in flights(client)}
+    assert set(ids) == {"QF 176", "QF 177"}
+    client.patch(f"/api/flights/{ids['QF 177']}", json={"notes": "keep me"})
+
+    monkeypatch.setattr(settings, "flight_exclude_airlines", ["QF"])
+    http.scheduled = [rec("1", "176", iata="QF", icao="QFA", origin="NZAA"), rec("3", "261", iata="NZ", icao="ANZ", origin="NZCH")]
+    _clear_throttle(client)
+    body = sync(client).json()
+    assert body["kept"] == 1 and body["removed_excluded"] == 1
+    assert {f["flight_no"] for f in flights(client)} == {"NZ 261", "QF 177"}  # recorded work survives

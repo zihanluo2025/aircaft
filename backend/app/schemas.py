@@ -266,5 +266,6 @@ class SyncOut(BaseModel):
     created: int
     updated: int
     skipped_started: int
+    removed_excluded: int = 0
     pages: int
     calls_this_month: int

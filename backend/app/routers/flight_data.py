@@ -114,6 +114,7 @@ def sync(body: SyncIn, db: Session = Depends(get_db), client: AeroApiClient = De
         "created": result.created,
         "updated": result.updated,
         "skipped_started": result.skipped_started,
+        "removed_excluded": result.removed_excluded,
         "pages": client.last_pages,
         "calls_this_month": used + client.last_pages,
     }

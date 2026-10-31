@@ -10,6 +10,7 @@ import singaporeLogo from '../assets/airlines/singapore.svg'
 import malaysiaLogo from '../assets/airlines/malaysia.svg'
 import chinaSouthernLogo from '../assets/airlines/china-southern.svg'
 import fijiLogo from '../assets/airlines/fiji.svg'
+import airNewZealandLogo from '../assets/airlines/air-new-zealand.png'
 
 const filter = ref('all')
 const chips = [
@@ -30,6 +31,7 @@ const AIRLINE_LOGO = {
   MH: malaysiaLogo,
   CZ: chinaSouthernLogo,
   FJ: fijiLogo,
+  NZ: airNewZealandLogo,
 }
 function airlineCode(flightNo) {
   return (flightNo || '').match(/^[A-Za-z]{2,3}/)?.[0]?.toUpperCase()

@@ -298,7 +298,8 @@ async function downloadTemplate() {
       <small v-if="fileLabel">Tap to choose another file</small>
     </label>
 
-    <div v-if="impRes" class="rt-result" :class="{ bad: !impRes.days }">
+    <div v-if="impRes" class="rt-after">
+    <div class="rt-result" :class="{ bad: !impRes.days }">
       <template v-if="impRes.days">
         <b>Ready to import</b>
         <span>
@@ -316,9 +317,10 @@ async function downloadTemplate() {
       </small>
     </div>
 
-    <button v-if="impRes && impRes.days" type="button" class="btn rt-go" @click="applyImport">
+    <button v-if="impRes.days" type="button" class="btn rt-go" @click="applyImport">
       Import {{ impRes.shifts }} shifts
     </button>
+    </div>
 
     <button type="button" class="rt-link" :aria-expanded="pasteOpen" @click="pasteOpen = !pasteOpen">
       {{ pasteOpen ? 'Hide paste box' : 'Or paste from Excel instead' }}
@@ -459,11 +461,17 @@ svg {
 .rt-drop small {
   font-size: 12px;
 }
+/* result + Import button share one indented column, so the button can't run past the card */
+.rt-after {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 10px 0 0 38px;
+}
 .rt-result {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  margin: 10px 0 0 38px;
   padding: 10px 12px;
   border-radius: 10px;
   border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
@@ -488,8 +496,7 @@ svg {
   color: var(--warn);
 }
 .rt-go {
-  width: calc(100% - 38px);
-  margin: 10px 0 0 38px;
+  width: 100%;
 }
 .rt-link {
   display: block;
@@ -512,13 +519,9 @@ svg {
 }
 @media (max-width: 400px) {
   .rt-drop,
-  .rt-result,
+  .rt-after,
   .rt-link,
   .rt-paste {
-    margin-left: 0;
-  }
-  .rt-go {
-    width: 100%;
     margin-left: 0;
   }
 }

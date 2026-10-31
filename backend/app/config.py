@@ -57,6 +57,8 @@ class Settings:
         self.flight_airlines = [c.upper() for c in _split(os.getenv("FLIGHT_AIRLINES", "JQ,VA"))]
         # ...or when it comes from overseas. "any" keeps either kind, "all" needs both.
         self.flight_international = _flag("FLIGHT_INTERNATIONAL", True)
+        # Airlines the company does no work for: dropped even when the flight is international.
+        self.flight_exclude_airlines = [c.upper() for c in _split(os.getenv("FLIGHT_EXCLUDE_AIRLINES", "QF"))]
         self.flight_filter_mode = _text("FLIGHT_FILTER_MODE", "any").lower()
         self.flight_max_pages = max(1, _number("FLIGHT_MAX_PAGES", 3))
         self.flight_include_arrived = _flag("FLIGHT_INCLUDE_ARRIVED", True)

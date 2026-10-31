@@ -19,6 +19,7 @@ class SyncResult:
     created: int = 0
     updated: int = 0
     skipped_started: int = 0
+    removed_excluded: int = 0
 
 
 def sync_shift(
@@ -70,8 +71,29 @@ def sync_shift(
         if before != (row.sched, row.eta, row.gate, row.rego, row.landed, row.cancelled, row.origin, row.airline):
             result.updated += 1
 
+    # Flights from an excluded airline that are already here (synced before the exclusion) go, but
+    # only if nobody has touched them -- recorded work is never deleted by a sync.
+    for row in list(existing.values()):
+        if rules.excludes(_airline_of(row.flight_no)) and _untouched(row):
+            db.delete(row)
+            result.removed_excluded += 1
+
     db.commit()
     return result
+
+
+def _airline_of(flight_no: str) -> str:
+    return (flight_no or "").split(" ")[0][:2].upper()
+
+
+def _untouched(row: Flight) -> bool:
+    return (
+        row.started_at is None
+        and not row.notes
+        and not row.sig_image
+        and not row.photos
+        and not any(a.staff_id for a in row.assignments)
+    )
 
 
 def _copy_details(row: Flight, pf: ProviderFlight) -> None:

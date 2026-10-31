@@ -14,7 +14,7 @@ import json
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, Callable, Optional
 from zoneinfo import ZoneInfo
@@ -78,6 +78,10 @@ class FlightFilter:
     airlines: list[str]
     international: bool
     mode: str = "any"  # "any": airline OR international, "all": airline AND international
+    exclude: list[str] = field(default_factory=list)  # airlines never kept, even when international
+
+    def excludes(self, airline_code: str) -> bool:
+        return airline_code.upper() in {a.upper() for a in self.exclude}
 
     def describe(self) -> str:
         names = [AIRLINE_NAMES.get(a, a) for a in self.airlines]
@@ -92,6 +96,8 @@ class FlightFilter:
         return "Showing " + joiner.join(parts)
 
     def keeps(self, flight: ProviderFlight) -> bool:
+        if self.excludes(flight.airline_code):
+            return False
         checks = []
         if self.airlines:
             checks.append(flight.airline_code.upper() in {a.upper() for a in self.airlines})
@@ -108,7 +114,12 @@ def apply_filter(flights: list[ProviderFlight], rules: FlightFilter) -> list[Pro
 
 def rules_from_settings(settings) -> FlightFilter:
     mode = settings.flight_filter_mode if settings.flight_filter_mode in {"any", "all"} else "any"
-    return FlightFilter(airlines=list(settings.flight_airlines), international=settings.flight_international, mode=mode)
+    return FlightFilter(
+        airlines=list(settings.flight_airlines),
+        international=settings.flight_international,
+        mode=mode,
+        exclude=list(settings.flight_exclude_airlines),
+    )
 
 
 def is_international(origin_icao: str) -> bool:
