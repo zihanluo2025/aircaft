@@ -194,7 +194,9 @@ const initials = (name) =>
     .filter((_, i, all) => i === 0 || i === all.length - 1)
     .map((w) => w[0].toUpperCase())
     .join('')
-const presetsToAdd = computed(() => PRESET_ROLES.filter((r) => !roleGroups.value.some((g) => g.role === r)))
+const presetsToAdd = computed(() =>
+  PRESET_ROLES[f.value.international ? 'international' : 'domestic'].filter((r) => !roleGroups.value.some((g) => g.role === r)),
+)
 const pickerSaving = ref(false)
 async function confirmPicker() {
   if (pickerSaving.value) return // a double tap must not send the same add twice

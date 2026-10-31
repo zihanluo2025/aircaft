@@ -11,7 +11,6 @@ const report = computed(() => state.report)
 // The Flights table is a record of completed work -- flights still scheduled, landed or cleaning
 // aren't done yet, so they don't belong in it.
 const doneFlights = computed(() => report.value.flights.filter((f) => f.status === 'done'))
-const summary = ref(null)
 
 // Read-only detail, expanded inline -- not the editable flight sheet used elsewhere.
 const expandedId = ref(null)
@@ -33,18 +32,6 @@ function openPhoto(id, index) {
 }
 
 onMounted(() => actions.loadReport())
-
-async function copy() {
-  const text = report.value.summary_text
-  try {
-    await navigator.clipboard.writeText(text)
-    toast('Copied')
-  } catch {
-    summary.value.focus()
-    summary.value.select()
-    toast('Text selected. Use Copy from the menu.')
-  }
-}
 
 const exporting = ref(false)
 async function exportExcel() {
@@ -143,12 +130,9 @@ async function exportExcel() {
         </div>
       </template>
 
-      <h3 style="margin-top: 18px">Copy summary</h3>
-      <textarea id="sumTxt" ref="summary" readonly :value="report.summary_text"></textarea>
-      <div class="two">
-        <button class="btn" @click="copy">Copy text</button>
-        <button class="btn2" :disabled="exporting" @click="exportExcel">{{ exporting ? 'Exporting...' : 'Export Excel' }}</button>
-      </div>
+      <button class="btn" style="width: 100%; margin-top: 18px" :disabled="exporting" @click="exportExcel">
+        {{ exporting ? 'Exporting...' : 'Export Excel' }}
+      </button>
     </template>
 
     <p class="foot">Signed in as {{ state.user.display_name || state.user.username }}</p>
