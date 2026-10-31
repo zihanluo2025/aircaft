@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { FIXED_ROLES, LICENCE_REQUIRED_ROLES, QUAL_LABEL, SHIFT_LABEL, SHIFT_NAME, SHIFT_ORDER } from '../constants.js'
 import { shortName } from '../lib/names.js'
+import { api } from '../api.js'
 import { actions, onDuty, state, toast } from '../store.js'
 import PeoplePicker from './PeoplePicker.vue'
 import StaffCard from './StaffCard.vue'
@@ -125,15 +126,13 @@ async function preview() {
 async function applyImport() {
   const result = await (impFile.value ? actions.importApplyFile(impFile.value) : actions.importApply(impText.value))
   if (result) {
-    impText.value = ''
-    impFile.value = null
-    impRes.value = null
+    resetImport()
     importOpen.value = false
   }
 }
-function onFile(event) {
-  const file = event.target.files && event.target.files[0]
+function takeFile(file) {
   if (!file) return
+  impRes.value = null
   if (file.name.toLowerCase().endsWith('.xlsx')) {
     impFile.value = file
     impText.value = ''
@@ -141,6 +140,7 @@ function onFile(event) {
     return
   }
   impFile.value = null
+  impFileName.value = file.name
   const reader = new FileReader()
   reader.onload = () => {
     impText.value = String(reader.result || '')
@@ -149,7 +149,56 @@ function onFile(event) {
   reader.onerror = () => toast('Could not read that file')
   reader.readAsText(file)
 }
+const impFileName = ref('')
+const fileLabel = computed(() => impFile.value?.name || impFileName.value)
+function onFile(event) {
+  takeFile(event.target.files && event.target.files[0])
+  event.target.value = '' // picking the same file again should still trigger a change
+}
+const dragging = ref(false)
+function onDrop(event) {
+  dragging.value = false
+  takeFile(event.dataTransfer.files && event.dataTransfer.files[0])
+}
+function resetImport() {
+  impFile.value = null
+  impFileName.value = ''
+  impText.value = ''
+  impRes.value = null
+}
+const pasteOpen = ref(false)
 
+// ---- roster template: the week (Monday to Sunday) that contains the date picked at the top ----
+const weekStart = computed(() => {
+  const [y, m, d] = state.date.split('-').map(Number)
+  const day = new Date(Date.UTC(y, m - 1, d))
+  day.setUTCDate(day.getUTCDate() - ((day.getUTCDay() + 6) % 7))
+  return day
+})
+const weekLabel = computed(() => {
+  const end = new Date(weekStart.value)
+  end.setUTCDate(end.getUTCDate() + 6)
+  const fmt = (x, opts) => x.toLocaleDateString('en-AU', { timeZone: 'UTC', ...opts })
+  return `${fmt(weekStart.value, { day: 'numeric', month: 'short' })} – ${fmt(end, { day: 'numeric', month: 'short' })}`
+})
+const downloading = ref(false)
+async function downloadTemplate() {
+  downloading.value = true
+  try {
+    const start = weekStart.value.toISOString().slice(0, 10)
+    const { blob, filename } = await api.roster.template(state.shift, start)
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename || `roster-${state.shift}-${start}.xlsx`
+    link.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  } catch (error) {
+    toast(error.message || 'Could not download the template')
+  } finally {
+    downloading.value = false
+  }
+}
 </script>
 
 <template>
@@ -206,47 +255,271 @@ function onFile(event) {
     </div>
   </details>
 
-  <details class="blk" style="margin-top: 10px" :open="importOpen" @toggle="importOpen = $event.target.open">
+  <details class="blk rt" style="margin-top: 10px" :open="importOpen" @toggle="importOpen = $event.target.open">
     <summary>Import roster</summary>
-    <p class="muted" style="margin-top: 0; font-size: 14px">
-      Upload the roster's own .xlsx file, paste from Excel, or choose a CSV file, in any of these
-      layouts. Dates are read as day first, like 13/10/2026. The roster goes into the
-      <b>{{ SHIFT_NAME[state.shift] }} shift</b> selected at the top.
-    </p>
-    <ul class="muted" style="margin: 0 0 10px; padding-left: 18px; font-size: 14px">
+    <p class="rt-lead">Download the template, fill in the times, then upload it. It goes into the <b>{{ SHIFT_NAME[state.shift] }}</b> shift.</p>
+
+    <ol class="rt-steps">
       <li>
-        One row per person, with a paired <b>Start</b> / <b>Indicative End</b> column for each date, like the
-        weekly export from the roster system. A trailing <b>note</b> column containing "driver" and/or
-        "truck" marks who holds each licence (or use dedicated Driver Licence / Truck Licence columns
-        instead). Early/Late/All day is worked out from the actual times. A leading title row above the
-        header, like "ADL - PM SHIFT - Week ending...", is skipped automatically.
+        <span class="rt-num">1</span>
+        <div class="rt-body">
+          <b>Download the template</b>
+          <small>Week of {{ weekLabel }}, with everyone on the {{ SHIFT_NAME[state.shift] }} team</small>
+        </div>
+        <button type="button" class="rt-dl" :disabled="downloading" @click="downloadTemplate">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg>
+          {{ downloading ? 'Preparing...' : 'Template' }}
+        </button>
       </li>
-      <li>One row per person with a single Early/Late/All day column per date.</li>
-      <li>One row per shift, with the columns Date, Name, Shift and an optional Role (Driver or Truck).</li>
-    </ul>
-    <textarea
-      id="impTxt"
-      v-model="impText"
-      aria-label="Roster text"
-      placeholder="Name,13/10/2026,14/10/2026&#10;Alex K,Early,All day&#10;Priya S,Late,Off"
-      @input="impRes = null; impFile = null"
-    ></textarea>
-    <label class="f" style="margin-top: 10px">Excel (.xlsx) or CSV file
+      <li>
+        <span class="rt-num">2</span>
+        <div class="rt-body">
+          <b>Fill in Start and End</b>
+          <small>Leave both blank for a day off. Write driver or truck in Note for licences.</small>
+        </div>
+      </li>
+      <li>
+        <span class="rt-num">3</span>
+        <div class="rt-body"><b>Upload it</b></div>
+      </li>
+    </ol>
+
+    <label
+      class="rt-drop"
+      :class="{ over: dragging, has: fileLabel }"
+      @dragover.prevent="dragging = true"
+      @dragleave="dragging = false"
+      @drop.prevent="onDrop"
+    >
       <input type="file" accept=".xlsx,.csv,.tsv,.txt" @change="onFile" />
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V5M7 10l5-5 5 5M5 20h14" /></svg>
+      <span v-if="fileLabel" class="rt-file">{{ fileLabel }}</span>
+      <span v-else>Choose the filled-in .xlsx, or drop it here</span>
+      <small v-if="fileLabel">Tap to choose another file</small>
     </label>
-    <div class="two">
-      <button class="btn2" @click="preview">Preview</button>
-      <button class="btn" :disabled="!impRes || !impRes.days" @click="applyImport">Import</button>
+
+    <div v-if="impRes" class="rt-result" :class="{ bad: !impRes.days }">
+      <template v-if="impRes.days">
+        <b>Ready to import</b>
+        <span>
+          {{ impRes.days }} day{{ impRes.days > 1 ? 's' : '' }} &middot; {{ impRes.people }} people<template v-if="impRes.new_people"> ({{ impRes.new_people }} new)</template>
+          &middot; {{ impRes.shifts }} shifts
+        </span>
+        <small>This replaces the current roster from the first day in the file onward.</small>
+      </template>
+      <template v-else>
+        <b>No shifts found</b>
+        <small>Use the template above, and make sure each worked day has a Start and an End time.</small>
+      </template>
+      <small v-if="impRes.bad.length" class="rt-warn">
+        Skipped {{ impRes.bad.length }} unreadable cell{{ impRes.bad.length > 1 ? 's' : '' }}, e.g. {{ impRes.bad.slice(0, 2).join('; ') }}
+      </small>
     </div>
-    <template v-if="impRes">
-      <p v-if="!impRes.days" class="impres bad">No shifts found. Check the layout described above and try again.</p>
-      <p v-else class="impres">
-        Found {{ impRes.days }} day{{ impRes.days > 1 ? 's' : '' }}, {{ impRes.people }} people ({{ impRes.new_people }} new),
-        {{ impRes.shifts }} shifts. Days that already have a roster will be replaced.
-      </p>
-      <p v-if="impRes.bad.length" class="impres bad">
-        Could not read {{ impRes.bad.length }} row{{ impRes.bad.length > 1 ? 's' : '' }}, for example: {{ impRes.bad.slice(0, 3).join('; ') }}
-      </p>
-    </template>
+
+    <button v-if="impRes && impRes.days" type="button" class="btn rt-go" @click="applyImport">
+      Import {{ impRes.shifts }} shifts
+    </button>
+
+    <button type="button" class="rt-link" :aria-expanded="pasteOpen" @click="pasteOpen = !pasteOpen">
+      {{ pasteOpen ? 'Hide paste box' : 'Or paste from Excel instead' }}
+    </button>
+    <div v-if="pasteOpen" class="rt-paste">
+      <textarea
+        id="impTxt"
+        v-model="impText"
+        aria-label="Roster text"
+        placeholder="Copy the rows from Excel, including the header, and paste here"
+        @input="impRes = null; impFile = null; impFileName = ''"
+      ></textarea>
+      <button type="button" class="btn2" :disabled="!impText.trim()" @click="preview">Check pasted roster</button>
+    </div>
   </details>
 </template>
+
+<style scoped>
+.rt-lead {
+  margin: 0 0 14px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.rt-steps {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.rt-steps li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.rt-num {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+}
+.rt-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.rt-body b {
+  font-size: 15px;
+  font-weight: 600;
+}
+.rt-body small {
+  font-size: 13px;
+  color: var(--muted);
+}
+svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.rt-dl {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 14px 0 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.rt-dl svg {
+  width: 17px;
+  height: 17px;
+}
+.rt-dl:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.rt-drop {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 96px;
+  margin-left: 38px;
+  padding: 14px;
+  border: 1.5px dashed var(--line);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 14px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.rt-drop:hover,
+.rt-drop.over {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg));
+}
+.rt-drop.has {
+  border-style: solid;
+}
+.rt-drop input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+}
+.rt-drop svg {
+  width: 22px;
+  height: 22px;
+}
+.rt-file {
+  color: var(--ink);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.rt-drop small {
+  font-size: 12px;
+}
+.rt-result {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 10px 0 0 38px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
+  background: color-mix(in srgb, var(--ok) 10%, transparent);
+  font-size: 14px;
+}
+.rt-result b {
+  color: var(--ok);
+}
+.rt-result.bad {
+  border-color: color-mix(in srgb, var(--warn) 40%, transparent);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+}
+.rt-result.bad b {
+  color: var(--warn);
+}
+.rt-result small {
+  font-size: 13px;
+  color: var(--muted);
+}
+.rt-result .rt-warn {
+  color: var(--warn);
+}
+.rt-go {
+  width: calc(100% - 38px);
+  margin: 10px 0 0 38px;
+}
+.rt-link {
+  display: block;
+  margin: 12px 0 0 38px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.rt-paste {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0 0 38px;
+}
+@media (max-width: 400px) {
+  .rt-drop,
+  .rt-result,
+  .rt-link,
+  .rt-paste {
+    margin-left: 0;
+  }
+  .rt-go {
+    width: 100%;
+    margin-left: 0;
+  }
+}
+</style>

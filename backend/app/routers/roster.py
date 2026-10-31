@@ -1,6 +1,7 @@
 from datetime import date as Date
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
@@ -20,6 +21,7 @@ from ..schemas import (
 )
 from ..services.domain import LICENCE_REQUIRED_ROLES, SHIFT_ORDER, title_case
 from ..services.roster_import import QUAL_ROLES, ParsedRoster, parse_roster_text, parse_roster_xlsx
+from ..services.roster_template import build_roster_template
 
 router = APIRouter(prefix="/api/roster", tags=["roster"], dependencies=[Depends(get_current_user)])
 
@@ -64,6 +66,24 @@ def get_roster(
         shift=shift,
         has_plan=any(e.planned_type for e, _ in rows),
         entries=[_entry_out(e, s) for e, s in rows],
+    )
+
+
+@router.get("/template")
+def roster_template(
+    shift: Shift = Query(...),
+    start: Date = Query(...),
+    db: Session = Depends(get_db),
+):
+    """A week's blank roster for the team, in the layout the importer reads: names and licences
+    filled in, times left for the manager to type."""
+    staff = db.scalars(select(Staff).where(Staff.team == shift, Staff.active.is_(True)).order_by(Staff.name)).all()
+    workbook = build_roster_template(start, shift, [(s.name, list(s.quals or [])) for s in staff])
+    filename = f"roster-{shift}-{start.isoformat()}.xlsx"
+    return StreamingResponse(
+        workbook,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

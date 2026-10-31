@@ -383,3 +383,33 @@ def test_reimport_replaces_previous_roster(client):
     # 不在新名单里的人不再出现在员工列表里，也从未开始的航班上撤下
     assert {s["name"] for s in client.get("/api/staff", params={"team": "morning"}).json()} == {"Alex K", "Tom W"}
     assert client.get(f"/api/flights/{flight['id']}").json()["assignments"][0]["staff_id"] is None
+
+
+def test_roster_template_round_trips_through_the_importer(client):
+    from datetime import time as _time
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    seed_team(client)  # Alex K, Priya S, Tom W on the morning team
+    alex = next(s for s in client.get("/api/staff", params={"team": "morning"}).json() if s["name"] == "Alex K")
+    client.patch(f"/api/staff/{alex['id']}", json={"quals": ["Driver"]})
+
+    response = client.get("/api/roster/template", params={"shift": "morning", "start": "2026-11-02"})
+    assert response.status_code == 200, response.text
+    assert "roster-morning-2026-11-02.xlsx" in response.headers["content-disposition"]
+
+    wb = load_workbook(BytesIO(response.content))
+    ws = wb.active
+    names = [ws.cell(row=r, column=1).value for r in range(4, ws.max_row + 1)]
+    assert names == ["Alex K", "Priya S", "Tom W"]
+    assert ws.cell(row=4, column=16).value == "driver"  # Note column after 7 Start/End pairs
+    # fill in Monday for Alex, Tuesday for Priya, leave Tom off all week
+    ws.cell(row=4, column=2).value, ws.cell(row=4, column=3).value = _time(6, 0), _time(13, 0)
+    ws.cell(row=5, column=4).value, ws.cell(row=5, column=5).value = _time(9, 0), _time(13, 0)
+    buf = BytesIO()
+    wb.save(buf)
+
+    files = {"file": ("roster.xlsx", buf.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+    preview = client.post("/api/roster/import/preview/file", data={"shift": "morning"}, files=files).json()
+    assert preview == {"days": 7, "people": 3, "new_people": 0, "shifts": 2, "bad": []}

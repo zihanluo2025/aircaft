@@ -109,6 +109,7 @@ export const api = {
     importApply: (shift, text) => post('/roster/import', { shift, text }),
     importPreviewFile: (shift, file) => postFile('/roster/import/preview/file', fileForm(shift, file)),
     importApplyFile: (shift, file) => postFile('/roster/import/file', fileForm(shift, file)),
+    template: (shift, start) => getBlob('/roster/template', { shift, start }),
   },
   flights: {
     list: (date, shift) => get('/flights', { date, shift }),
