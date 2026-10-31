@@ -46,9 +46,11 @@ AIRLINE_NAMES = {
     "XAX": "AirAsia X",
     "FJ": "Fiji Airways",
     "FJI": "Fiji Airways",
+    "CZ": "China Southern",
+    "CSN": "China Southern",
 }
 # ICAO -> IATA, so a filter written with either kind of code works
-ICAO_TO_IATA = {"JST": "JQ", "VOZ": "VA", "QFA": "QF", "ANZ": "NZ", "SIA": "SQ", "UAE": "EK", "QTR": "QR"}
+ICAO_TO_IATA = {"JST": "JQ", "VOZ": "VA", "QFA": "QF", "ANZ": "NZ", "SIA": "SQ", "UAE": "EK", "QTR": "QR", "MAS": "MH", "CSN": "CZ"}
 
 
 class FlightDataError(Exception):
@@ -96,13 +98,18 @@ class FlightFilter:
         return "Showing " + joiner.join(parts)
 
     def keeps(self, flight: ProviderFlight) -> bool:
-        if self.excludes(flight.airline_code):
+        return self.keeps_airline(flight.airline_code, flight.international)
+
+    def keeps_airline(self, airline_code: str, international: bool) -> bool:
+        """The airline/international part of the rules (no time window), so rows already stored can be
+        checked against the current rules too."""
+        if self.excludes(airline_code):
             return False
         checks = []
         if self.airlines:
-            checks.append(flight.airline_code.upper() in {a.upper() for a in self.airlines})
+            checks.append(airline_code.upper() in {a.upper() for a in self.airlines})
         if self.international:
-            checks.append(flight.international)
+            checks.append(international)
         if not checks:
             return True
         return all(checks) if self.mode == "all" else any(checks)

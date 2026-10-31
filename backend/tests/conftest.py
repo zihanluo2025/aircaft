@@ -2,9 +2,8 @@ import os
 
 os.environ.setdefault("SECRET_KEY", "test-secret")
 # Tests never talk to the real flight service, and a developer's backend/.env must not leak in.
-for _name in ("FLIGHT_API_KEY", "FLIGHT_AIRLINES", "FLIGHT_INTERNATIONAL", "FLIGHT_FILTER_MODE", "FLIGHT_MONTHLY_CALL_LIMIT", "FLIGHT_SYNC_MIN_INTERVAL_SECONDS", "MORNING_WINDOW", "NIGHT_WINDOW", "AIRPORT_TZ"):
+for _name in ("FLIGHT_API_KEY", "FLIGHT_AIRLINES", "FLIGHT_INTERNATIONAL", "FLIGHT_EXCLUDE_AIRLINES", "FLIGHT_FILTER_MODE", "FLIGHT_MONTHLY_CALL_LIMIT", "FLIGHT_SYNC_MIN_INTERVAL_SECONDS", "MORNING_WINDOW", "NIGHT_WINDOW", "AIRPORT_TZ"):
     os.environ[_name] = ""
-os.environ["FLIGHT_AIRLINES"] = "JQ,VA"
 
 import pytest
 from fastapi.testclient import TestClient

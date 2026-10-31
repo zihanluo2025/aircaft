@@ -28,8 +28,9 @@
 - 对应配置：`MORNING_WINDOW=06:00-13:00`，`NIGHT_WINDOW=13:00-06:00`，`AIRPORT_TZ=Australia/Adelaide`。
 
 ## 航班数据
-- 只保留国际航班（出发机场 ICAO 不以 Y 开头）加上 Jetstar（JQ）和 Virgin Australia（VA）。
-- 公司不做 Qantas（QF）的业务：`FLIGHT_EXCLUDE_AIRLINES=QF` 里的航司即使是国际航班也不保留；同步时会删掉库里这些航司还没人动过的航班（没开始、没人员、没备注、没签字、没照片）。
+- 只保留这些航司（白名单 `FLIGHT_AIRLINES`）：Virgin Australia（VA）、Jetstar（JQ）、Singapore（SQ）、Malaysia（MH）、Air New Zealand（NZ）、China Southern（CZ）、Qatar（QR）、Emirates（EK）。`FLIGHT_INTERNATIONAL=false`，其他国际航班不保留。
+- 公司不做 Qantas（QF）的业务：`FLIGHT_EXCLUDE_AIRLINES=QF` 里的航司无论如何都不保留。
+- 同步时会删掉库里已不符合规则、而且还没人动过的航班（没开始、没人员、没备注、没签字、没照片）。
 - 同步绝不能修改已经开始清洁的航班，也不能动人员、备注和签字。
 - 按结果集计费，注意 `FLIGHT_MONTHLY_CALL_LIMIT`。
 

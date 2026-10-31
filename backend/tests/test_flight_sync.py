@@ -59,13 +59,13 @@ def sync(client):
     return client.post("/api/flight-data/sync", json={"date": DAY, "shift": "morning"})
 
 
-def test_sync_keeps_only_international_and_listed_airlines(client, fake):
+def test_sync_keeps_only_the_listed_airlines(client, fake):
     fake(
         [
             rec("1", "100"),  # Jetstar, domestic: kept
             rec("2", "200", iata="VA", icao="VOZ"),  # Virgin, domestic: kept
-            rec("3", "300", iata="QF", icao="QFA"),  # Qantas domestic: dropped
-            rec("4", "400", iata="SQ", icao="SIA", origin="WSSS"),  # international: kept
+            rec("3", "300", iata="QF", icao="QFA"),  # Qantas: excluded
+            rec("4", "400", iata="SQ", icao="SIA", origin="WSSS"),  # Singapore, international: kept
             rec("5", "500", iata="JQ", icao="JST", origin="NZAA"),  # Jetstar international: kept
         ]
     )
@@ -75,6 +75,9 @@ def test_sync_keeps_only_international_and_listed_airlines(client, fake):
     assert (body["fetched"], body["kept"], body["created"]) == (5, 4, 4)
     rows = {f["flight_no"]: f for f in flights(client)}
     assert set(rows) == {"JQ 100", "VA 200", "SQ 400", "JQ 500"}
+    _clear_throttle(client)
+    fake([rec("6", "911", iata="FJ", icao="FJI", origin="NFFN")])  # international, but not on the list
+    assert sync(client).json()["kept"] == 0
     assert rows["SQ 400"]["international"] and rows["SQ 400"]["origin"] == "WSSS"
     assert not rows["JQ 100"]["international"]
     assert rows["JQ 100"]["sched"] == "06:00" and rows["JQ 100"]["gate"] == "3"
@@ -159,7 +162,7 @@ def test_missing_key_gives_503_and_status_says_not_configured(client):
     assert sync(client).status_code == 503
     status = client.get("/api/flight-data/status").json()
     assert status["configured"] is False
-    assert "international" in status["filter_text"].lower()
+    assert "air new zealand" in status["filter_text"].lower()
     assert status["monthly_limit"] > 0
 
 
@@ -174,7 +177,9 @@ def test_excluded_airline_is_dropped_even_when_international_and_untouched_rows_
     from app.config import settings
     from app.models import Flight
 
-    # an old QF row from before the exclusion, one nobody touched and one with notes on it
+    # an old QF row from before the exclusion, one nobody touched and one with notes on it; keep every
+    # international arrival here, to show the exclusion beats that rule
+    monkeypatch.setattr(settings, "flight_international", True)
     monkeypatch.setattr(settings, "flight_exclude_airlines", [])
     http = fake([rec("1", "176", iata="QF", icao="QFA", origin="NZAA"), rec("2", "177", iata="QF", icao="QFA", origin="NZAA")])
     sync(client)
@@ -186,5 +191,28 @@ def test_excluded_airline_is_dropped_even_when_international_and_untouched_rows_
     http.scheduled = [rec("1", "176", iata="QF", icao="QFA", origin="NZAA"), rec("3", "261", iata="NZ", icao="ANZ", origin="NZCH")]
     _clear_throttle(client)
     body = sync(client).json()
-    assert body["kept"] == 1 and body["removed_excluded"] == 1
+    assert body["kept"] == 1 and body["removed"] == 1
     assert {f["flight_no"] for f in flights(client)} == {"NZ 261", "QF 177"}  # recorded work survives
+
+
+def test_only_listed_airlines_are_kept_and_unlisted_untouched_rows_removed(client, fake, monkeypatch):
+    from app.config import settings
+
+    # before: every international arrival was kept, so Fiji got in
+    monkeypatch.setattr(settings, "flight_international", True)
+    http = fake([rec("1", "911", iata="FJ", icao="FJI", origin="NFFN"), rec("2", "261", iata="NZ", icao="ANZ", origin="NZCH")])
+    sync(client)
+    assert {f["flight_no"] for f in flights(client)} == {"FJ 911", "NZ 261"}
+
+    # now: whitelist only
+    monkeypatch.setattr(settings, "flight_international", False)
+    monkeypatch.setattr(settings, "flight_airlines", ["VA", "JQ", "SQ", "MH", "NZ", "CZ", "QR", "EK"])
+    http.scheduled = [
+        rec("1", "911", iata="FJ", icao="FJI", origin="NFFN"),
+        rec("2", "261", iata="NZ", icao="ANZ", origin="NZCH"),
+        rec("3", "313", iata="CZ", icao="CSN", origin="ZGGG"),
+    ]
+    _clear_throttle(client)
+    body = sync(client).json()
+    assert body["removed"] == 1
+    assert {f["flight_no"] for f in flights(client)} == {"NZ 261", "CZ 313"}

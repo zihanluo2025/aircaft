@@ -54,11 +54,12 @@ class Settings:
         self.airport_icao = _text("AIRPORT_ICAO", "YPAD").upper()
         self.airport_tz = _text("AIRPORT_TZ", "Australia/Adelaide")
         # Keep a flight when its airline is listed here (IATA codes: JQ = Jetstar, VA = Virgin Australia)...
-        self.flight_airlines = [c.upper() for c in _split(os.getenv("FLIGHT_AIRLINES", "JQ,VA"))]
+        # Only these airlines are kept. Blank means the default list, never "every airline".
+        self.flight_airlines = [c.upper() for c in _split(os.getenv("FLIGHT_AIRLINES") or "VA,JQ,SQ,MH,NZ,CZ,QR,EK")]
         # ...or when it comes from overseas. "any" keeps either kind, "all" needs both.
-        self.flight_international = _flag("FLIGHT_INTERNATIONAL", True)
+        self.flight_international = _flag("FLIGHT_INTERNATIONAL", False)
         # Airlines the company does no work for: dropped even when the flight is international.
-        self.flight_exclude_airlines = [c.upper() for c in _split(os.getenv("FLIGHT_EXCLUDE_AIRLINES", "QF"))]
+        self.flight_exclude_airlines = [c.upper() for c in _split(os.getenv("FLIGHT_EXCLUDE_AIRLINES") or "QF")]
         self.flight_filter_mode = _text("FLIGHT_FILTER_MODE", "any").lower()
         self.flight_max_pages = max(1, _number("FLIGHT_MAX_PAGES", 3))
         self.flight_include_arrived = _flag("FLIGHT_INCLUDE_ARRIVED", True)
