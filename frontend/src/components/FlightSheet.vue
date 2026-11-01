@@ -453,7 +453,7 @@ async function saveSignature() {
           <PeoplePicker
             v-model:show="pickerOpen"
             v-model="pickerSelected"
-            :title="`Add to ${pickerRole}`"
+            :title="pickerRole"
             :options="pickerOptions"
             :section-order="['Toilet today', 'Available', 'On a fixed role today', 'Not available']"
             :confirm-text="pickerSelected.length ? `Add ${pickerSelected.length}` : 'Add'"
