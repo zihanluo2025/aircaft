@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { STATUS_LABEL } from '../constants.js'
+import { hhmm } from '../lib/time.js'
 import { actions, state } from '../store.js'
 import jetstarLogo from '../assets/airlines/jetstar.svg'
 import virginLogo from '../assets/airlines/virgin-australia.svg'
@@ -145,15 +146,15 @@ const mix = computed(() => {
   }
 })
 
-/** One line under the toolbar: what the filter shows, and when flights were last updated. */
+/** One line under the toolbar: when flights were last updated, and how much of the quota is used. */
 const dataNote = computed(() => {
   const d = state.flightData
   if (!d) return ''
   if (!d.configured) return 'Flight data is not set up. Add FLIGHT_API_KEY to backend/.env.'
-  const parts = [d.filter_text]
+  const parts = []
   if (d.last_sync_at) {
-    const when = new Date(d.last_sync_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    parts.push(d.last_ok ? `updated ${when}` : `last update failed at ${when}`)
+    const when = hhmm(d.last_sync_at)
+    parts.push(d.last_ok ? `Updated ${when}` : `Last update failed at ${when}`)
   }
   parts.push(`${d.calls_this_month} of ${d.monthly_limit} result sets used this month`)
   return parts.join('. ')

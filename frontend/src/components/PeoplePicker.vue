@@ -16,10 +16,11 @@ const props = defineProps({
   confirmText: { type: String, default: 'Add' },
   allowEmpty: { type: Boolean, default: false }, // Confirm with nothing selected (e.g. clear a role)
   saving: { type: Boolean, default: false },
-  // Optional ‹ › buttons beside the title to step to the previous / next position without closing
-  // the sheet; `step` is a small "3 of 11" under the title. The parent decides what a step does.
-  hasPrev: { type: Boolean, default: false },
-  hasNext: { type: Boolean, default: false },
+  // Optional row under the header to step to the previous / next position without closing the
+  // sheet, each button named after where it goes (empty = none that way); `step` is a small
+  // "3 of 11" under the title. The parent decides what a step does.
+  prevLabel: { type: String, default: '' },
+  nextLabel: { type: String, default: '' },
   step: { type: String, default: '' },
 })
 const emit = defineEmits(['update:show', 'update:modelValue', 'confirm', 'prev', 'next'])
@@ -71,19 +72,21 @@ const SHIFT_TONE = { early: 'var(--early)', late: 'var(--lateS)', all: 'var(--lo
       <div class="pp-sheet-head">
         <button type="button" class="pp-hbtn" @click="emit('update:show', false)">Cancel</button>
         <div class="pp-title">
-          <button v-if="hasPrev || hasNext" type="button" class="pp-step" :disabled="!hasPrev || saving" aria-label="Previous position" @click="emit('prev')">
-            <svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" /></svg>
-          </button>
-          <div class="pp-title-text">
-            <h3>{{ title }}</h3>
-            <small v-if="step">{{ step }}</small>
-          </div>
-          <button v-if="hasPrev || hasNext" type="button" class="pp-step" :disabled="!hasNext || saving" aria-label="Next position" @click="emit('next')">
-            <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" /></svg>
-          </button>
+          <h3>{{ title }}</h3>
+          <small v-if="step">{{ step }}</small>
         </div>
         <button type="button" class="pp-hbtn pp-hdone" :disabled="(!modelValue.length && !allowEmpty) || saving" @click="emit('confirm')">
           {{ confirmText }}
+        </button>
+      </div>
+      <div v-if="prevLabel || nextLabel" class="pp-nav">
+        <button type="button" class="pp-step" :class="{ none: !prevLabel }" :disabled="!prevLabel || saving" :aria-label="`Previous position: ${prevLabel}`" @click="emit('prev')">
+          <svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" /></svg>
+          <span>{{ prevLabel }}</span>
+        </button>
+        <button type="button" class="pp-step next" :class="{ none: !nextLabel }" :disabled="!nextLabel || saving" :aria-label="`Next position: ${nextLabel}`" @click="emit('next')">
+          <span>{{ nextLabel }}</span>
+          <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" /></svg>
         </button>
       </div>
       <label class="pp-search">
@@ -174,13 +177,6 @@ const SHIFT_TONE = { early: 'var(--early)', late: 'var(--lateS)', all: 'var(--lo
   padding: 8px 8px 0;
 }
 .pp-title {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  min-width: 0;
-}
-.pp-title-text {
   min-width: 0;
   text-align: center;
 }
@@ -192,35 +188,63 @@ const SHIFT_TONE = { early: 'var(--early)', late: 'var(--lateS)', all: 'var(--lo
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.pp-title-text small {
+.pp-title small {
   display: block;
+  margin-top: 1px;
   font-size: 12px;
   color: var(--muted);
 }
-.pp-step {
+/* previous / next position row */
+.pp-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
   flex: none;
-  width: 36px;
-  height: 36px;
+  margin: 10px 16px 0;
+}
+.pp-step {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: calc(50% - 5px);
+  height: 36px;
+  padding: 0 14px 0 8px;
   border: 1px solid var(--line);
-  border-radius: 50%;
+  border-radius: 999px;
   background: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
   color: var(--ink);
   cursor: pointer;
 }
+.pp-step.next {
+  padding: 0 8px 0 14px;
+}
+.pp-step span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .pp-step svg {
+  flex: none;
   width: 18px;
   height: 18px;
+  color: var(--muted);
 }
 .pp-step:hover:not(:disabled) {
   border-color: var(--accent);
+}
+.pp-step:hover:not(:disabled) svg {
   color: var(--accent);
 }
 .pp-step:disabled {
-  opacity: 0.3;
+  opacity: 0.5;
   cursor: default;
+}
+.pp-step.none {
+  visibility: hidden; /* keeps the other button on its own side */
 }
 .pp-hbtn {
   justify-self: start;

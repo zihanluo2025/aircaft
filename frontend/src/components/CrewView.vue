@@ -176,12 +176,6 @@ const weekStart = computed(() => {
   day.setUTCDate(day.getUTCDate() - ((day.getUTCDay() + 6) % 7))
   return day
 })
-const weekLabel = computed(() => {
-  const end = new Date(weekStart.value)
-  end.setUTCDate(end.getUTCDate() + 6)
-  const fmt = (x, opts) => x.toLocaleDateString('en-AU', { timeZone: 'UTC', ...opts })
-  return `${fmt(weekStart.value, { day: 'numeric', month: 'short' })} – ${fmt(end, { day: 'numeric', month: 'short' })}`
-})
 const downloading = ref(false)
 async function downloadTemplate() {
   downloading.value = true
@@ -273,7 +267,7 @@ async function downloadTemplate() {
         <span class="rt-num">1</span>
         <div class="rt-body">
           <b>Download the template</b>
-          <small>Week of {{ weekLabel }}, with everyone on the {{ SHIFT_NAME[state.shift] }} team</small>
+          <small>A blank week with your team's names already filled in</small>
         </div>
         <button type="button" class="rt-dl" :disabled="downloading" @click="downloadTemplate">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg>
