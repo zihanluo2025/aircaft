@@ -157,7 +157,11 @@ const SHIFT_TONE = { early: 'var(--early)', late: 'var(--lateS)', all: 'var(--lo
 .pp-sheet {
   background: var(--surface);
   color: var(--ink);
-  max-height: 85vh;
+  /* fixed height, not sized to the list: stepping between positions must not make the sheet jump,
+     so the header buttons stay put. dvh follows the mobile browser bar; vh is the fallback. */
+  height: 85vh;
+  height: 85dvh;
+  max-height: none;
   display: flex;
   flex-direction: column;
 }
