@@ -120,10 +120,10 @@ async function exportExcel() {
         <h3 style="margin-top: 18px">Per person</h3>
         <div class="scroll">
           <table>
-            <thead><tr><th>Name</th><th>Aircraft</th><th>Minutes</th></tr></thead>
+            <thead><tr><th>Name</th><th>Aircraft</th></tr></thead>
             <tbody>
               <tr v-for="p in report.people" :key="p.staff_id">
-                <td>{{ p.name }}</td><td class="n">{{ p.aircraft }}</td><td class="n">{{ p.minutes }}</td>
+                <td>{{ p.name }}</td><td class="n">{{ p.aircraft }}</td>
               </tr>
             </tbody>
           </table>

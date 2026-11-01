@@ -80,9 +80,8 @@ def _build_report(db: Session, work_date: Date, shift: str) -> ReportOut:
         if status == "done":
             for staff_id in {c["staff_id"] for c in crew if c["staff_id"]}:
                 name = next(c["staff_name"] for c in crew if c["staff_id"] == staff_id)
-                person = people.setdefault(staff_id, {"staff_id": staff_id, "name": name, "aircraft": 0, "minutes": 0})
+                person = people.setdefault(staff_id, {"staff_id": staff_id, "name": name, "aircraft": 0})
                 person["aircraft"] += 1
-                person["minutes"] += flight_minutes(f) or 0
 
     has_plan = any(e.planned_type for e, _ in entries)
     called_in = sorted((title_case(s.name) for e, s in entries if e.shift_type and e.called_in_at), key=str.lower)

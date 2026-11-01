@@ -67,7 +67,6 @@ function personOption(staffId, name, shiftType, meta, fixed) {
     meta,
     fixed,
     note: other ? (other.status === 'cleaning' ? `Cleaning ${other.no}` : `Also on ${other.no}`) : '',
-    noteHot: other?.status === 'cleaning',
     disabled: here || !!start,
     reason: here ? 'On this aircraft' : start ? `Starts ${start}` : '',
   }
@@ -95,15 +94,6 @@ const toiletOptions = computed(() =>
     }),
 )
 
-/** Clears every row on another flight that still has this person, freeing them up to be assigned
- * here -- used when moving someone off an aircraft that is still mid-clean. */
-function freeFromOtherFlight(otherFlightId, staffId) {
-  const other = state.flights.find((x) => x.id === otherFlightId)
-  if (!other) return Promise.resolve(true)
-  const rows = other.assignments.map((a) => ({ role: a.role, staff_id: a.staff_id === staffId ? null : a.staff_id }))
-  return actions.saveAssignments(otherFlightId, rows)
-}
-
 // Group the flat assignment rows by role so each section can show multiple people as chips.
 const roleGroups = computed(() => {
   const order = []
@@ -123,25 +113,12 @@ const peopleIn = (g) => g.rows.filter((r) => r.staff_id)
 
 const rowsPayload = () => f.value.assignments.map((a) => ({ role: a.role, staff_id: a.staff_id }))
 
-// Everyone picked in one go is saved in a single request, built after any moves off other
-// aircraft have finished -- several overlapping saves of the whole list used to race on the server
-// and leave the same person on the aircraft twice.
+// Everyone picked in one go is saved in a single request -- several overlapping saves of the whole
+// list used to race on the server and leave the same person on the aircraft twice.
 async function addPeople(role, staffIds) {
-  const accepted = []
-  for (const staffId of staffIds) {
-    const other = busy.value.get(staffId)
-    if (other && other.status === 'cleaning') {
-      const name = shortName((onDuty.value.find((e) => e.staff_id === staffId) || {}).name || 'This person')
-      if (!confirm(`${name} is currently cleaning ${other.no}. Move them to ${role} here instead?`)) continue
-      const freed = await freeFromOtherFlight(other.id, staffId)
-      if (freed === undefined) continue
-    }
-    accepted.push(staffId)
-  }
-
   const rows = rowsPayload()
   let changed = false
-  for (const staffId of accepted) {
+  for (const staffId of staffIds) {
     if (rows.some((r) => r.staff_id === staffId)) continue
     const emptyIndex = rows.findIndex((r) => r.role === role && !r.staff_id)
     if (emptyIndex >= 0) rows[emptyIndex].staff_id = staffId

@@ -43,11 +43,11 @@ def build_report_workbook(report: ReportOut) -> BytesIO:
     flights_ws.column_dimensions["G"].width = 70
 
     people_ws = wb.create_sheet("Per person")
-    people_ws.append(["Name", "Aircraft", "Minutes"])
+    people_ws.append(["Name", "Aircraft"])
     for cell in people_ws[1]:
         cell.font = bold
     for p in report.people:
-        people_ws.append([p.name, p.aircraft, p.minutes])
+        people_ws.append([p.name, p.aircraft])
     people_ws.column_dimensions["A"].width = 30
 
     buf = BytesIO()

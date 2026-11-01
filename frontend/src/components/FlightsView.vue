@@ -43,8 +43,9 @@ function airlineLogo(flightNo) {
 
 // The Flight mix cards (international / Jetstar / Virgin) double as a second filter, on top of
 // the status chips. Clicking an active one again clears it. Mutually exclusive with the hour
-// filter below -- picking one clears the other.
-const mixFilter = ref(null)
+// filter below -- picking one clears the other. Starts on international, the flights the team
+// works most; tap it again to see everything.
+const mixFilter = ref('international')
 // International takes priority: an international Jetstar/Virgin flight counts under
 // "international", not under its airline, so each flight lands in exactly one bucket.
 const MIX_PREDICATES = {

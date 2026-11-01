@@ -140,15 +140,17 @@ def test_signature_needs_finished_flight(client):
     assert response.status_code == 400
 
 
-def test_cannot_double_book_a_cleaner(client):
+def test_cleaner_can_join_a_second_aircraft_while_the_first_is_cleaning(client):
+    # People finish their part on one aircraft and go straight to the next one, while the first
+    # one's clock is still running -- they stay on both.
     ids = seed_team(client)
-    first, second = new_flight(client, "QF 705", "05:50"), new_flight(client, "VA 1252", "06:25")
+    first, second = new_flight(client, "VA 705", "05:50"), new_flight(client, "VA 1252", "06:25")
     job = [{"role": "Vacuum", "staff_id": ids["Priya S"]}]
     assert client.put(f"/api/flights/{first['id']}/assignments", json=job).status_code == 200
     assert client.post(f"/api/flights/{first['id']}/start").status_code == 200
-    clash = client.put(f"/api/flights/{second['id']}/assignments", json=job)
-    assert clash.status_code == 409
-    assert "Priya S" in clash.json()["detail"]
+    again = client.put(f"/api/flights/{second['id']}/assignments", json=job)
+    assert again.status_code == 200
+    assert client.get(f"/api/flights/{first['id']}").json()["assignments"][0]["staff_id"] == ids["Priya S"]
 
 
 def test_cannot_assign_the_same_person_twice_on_one_flight(client):

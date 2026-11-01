@@ -225,7 +225,6 @@ class ReportPerson(BaseModel):
     staff_id: int
     name: str
     aircraft: int
-    minutes: int
 
 
 class ReportOut(BaseModel):

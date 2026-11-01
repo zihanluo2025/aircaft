@@ -82,7 +82,8 @@ def delete_flight(flight_id: int, db: Session = Depends(get_db)):
 
 @router.put("/{flight_id}/assignments", response_model=FlightOut)
 def put_assignments(flight_id: int, items: list[AssignmentIn], db: Session = Depends(get_db)):
-    """Replace the per aircraft jobs. People newly added must be on duty and not busy on another aircraft."""
+    """Replace the per aircraft jobs. People newly added must be on duty; they may also be on other
+    aircraft, even ones still being cleaned."""
     # 锁住这架航班，两个同时到达的保存请求排队执行，否则都会"先清空再插入"，留下重复的人
     db.execute(select(Flight.id).where(Flight.id == flight_id).with_for_update())
     flight = _load(db, flight_id)
@@ -118,24 +119,7 @@ def put_assignments(flight_id: int, items: list[AssignmentIn], db: Session = Dep
                 raise HTTPException(status_code=400, detail="Unknown staff member")
             if staff_id not in on_duty:
                 raise HTTPException(status_code=400, detail=f"{title_case(staff.name)} is not on today's roster")
-
-        busy = db.execute(
-            select(Assignment.staff_id, Flight.flight_no)
-            .join(Flight, Flight.id == Assignment.flight_id)
-            .where(
-                Flight.work_date == flight.work_date,
-                Flight.shift == flight.shift,
-                Flight.id != flight.id,
-                Flight.started_at.is_not(None),
-                Flight.finished_at.is_(None),
-                Flight.cancelled.is_(False),
-                Assignment.staff_id.in_(list(new_ids)),
-            )
-        ).first()
-        if busy is not None:
-            raise HTTPException(
-                status_code=409, detail=f"{title_case(staff_rows[busy[0]].name)} is cleaning {busy[1]} right now"
-            )
+        # 同一个人可以同时在多架飞机上：一架做完自己那部分就去下一架，前一架可能还在计时
 
     flight.assignments.clear()
     db.flush()
