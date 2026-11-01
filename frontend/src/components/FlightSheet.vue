@@ -175,6 +175,25 @@ const presetsToAdd = computed(() =>
   PRESET_ROLES[f.value.international ? 'international' : 'domestic'].filter((r) => !roleGroups.value.some((g) => g.role === r)),
 )
 const pickerSaving = ref(false)
+// ‹ › in the sheet header: save what's ticked for this position, then move to the previous / next
+// one without closing, so a whole aircraft can be filled in one go.
+const pickerIndex = computed(() => roleGroups.value.findIndex((g) => g.role === pickerRole.value))
+async function stepPicker(delta) {
+  if (pickerSaving.value) return
+  const target = roleGroups.value[pickerIndex.value + delta]
+  if (!target) return
+  const ids = [...pickerSelected.value]
+  if (ids.length) {
+    pickerSaving.value = true
+    try {
+      await addPeople(pickerRole.value, ids)
+    } finally {
+      pickerSaving.value = false
+    }
+  }
+  pickerRole.value = target.role
+  pickerSelected.value = []
+}
 async function confirmPicker() {
   if (pickerSaving.value) return // a double tap must not send the same add twice
   pickerSaving.value = true
@@ -439,8 +458,17 @@ async function saveSignature() {
             :section-order="['Toilet today', 'Available', 'On a fixed role today', 'Not available']"
             :confirm-text="pickerSelected.length ? `Add ${pickerSelected.length}` : 'Add'"
             :saving="pickerSaving"
+            :has-prev="pickerIndex > 0"
+            :has-next="pickerIndex >= 0 && pickerIndex < roleGroups.length - 1"
+            :step="pickerIndex >= 0 ? `${pickerIndex + 1} of ${roleGroups.length}` : ''"
             @confirm="confirmPicker"
-          />
+            @prev="stepPicker(-1)"
+            @next="stepPicker(1)"
+          >
+            <template #empty>
+              <p class="pp-none">{{ pickerRole === 'Toilet' ? 'Nobody is Toilet today. Set it on the Staff tab.' : 'Nobody is on duty.' }}</p>
+            </template>
+          </PeoplePicker>
         </section>
 
         <section class="blk">

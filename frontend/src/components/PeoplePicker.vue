@@ -16,14 +16,28 @@ const props = defineProps({
   confirmText: { type: String, default: 'Add' },
   allowEmpty: { type: Boolean, default: false }, // Confirm with nothing selected (e.g. clear a role)
   saving: { type: Boolean, default: false },
+  // Optional ‹ › buttons beside the title to step to the previous / next position without closing
+  // the sheet; `step` is a small "3 of 11" under the title. The parent decides what a step does.
+  hasPrev: { type: Boolean, default: false },
+  hasNext: { type: Boolean, default: false },
+  step: { type: String, default: '' },
 })
-const emit = defineEmits(['update:show', 'update:modelValue', 'confirm'])
+const emit = defineEmits(['update:show', 'update:modelValue', 'confirm', 'prev', 'next'])
 
 const query = ref('')
+const list = ref(null)
 watch(
   () => props.show,
   (open) => {
     if (open) query.value = ''
+  },
+)
+// stepping to another position starts it fresh: no leftover search, list back at the top
+watch(
+  () => props.title,
+  () => {
+    query.value = ''
+    if (list.value) list.value.scrollTop = 0
   },
 )
 
@@ -56,7 +70,18 @@ const SHIFT_TONE = { early: 'var(--early)', late: 'var(--lateS)', all: 'var(--lo
     <div class="pp-sheet-in">
       <div class="pp-sheet-head">
         <button type="button" class="pp-hbtn" @click="emit('update:show', false)">Cancel</button>
-        <h3>{{ title }}</h3>
+        <div class="pp-title">
+          <button v-if="hasPrev || hasNext" type="button" class="pp-step" :disabled="!hasPrev || saving" aria-label="Previous position" @click="emit('prev')">
+            <svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" /></svg>
+          </button>
+          <div class="pp-title-text">
+            <h3>{{ title }}</h3>
+            <small v-if="step">{{ step }}</small>
+          </div>
+          <button v-if="hasPrev || hasNext" type="button" class="pp-step" :disabled="!hasNext || saving" aria-label="Next position" @click="emit('next')">
+            <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" /></svg>
+          </button>
+        </div>
         <button type="button" class="pp-hbtn pp-hdone" :disabled="(!modelValue.length && !allowEmpty) || saving" @click="emit('confirm')">
           {{ confirmText }}
         </button>
@@ -65,7 +90,7 @@ const SHIFT_TONE = { early: 'var(--early)', late: 'var(--lateS)', all: 'var(--lo
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></svg>
         <input v-model="query" type="search" placeholder="Search by name" aria-label="Search by name" />
       </label>
-      <div class="pp-list">
+      <div ref="list" class="pp-list">
         <slot name="empty" v-if="!options.length" />
         <p v-if="!sections.length && options.length" class="pp-none">Nobody matches.</p>
         <template v-for="sec in sections" :key="sec.title">
@@ -144,15 +169,58 @@ const SHIFT_TONE = { early: 'var(--early)', late: 'var(--lateS)', all: 'var(--lo
 .pp-sheet-head {
   flex: none;
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   padding: 8px 8px 0;
+}
+.pp-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+}
+.pp-title-text {
+  min-width: 0;
+  text-align: center;
 }
 .pp-sheet-head h3 {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pp-title-text small {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+.pp-step {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+}
+.pp-step svg {
+  width: 18px;
+  height: 18px;
+}
+.pp-step:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.pp-step:disabled {
+  opacity: 0.3;
+  cursor: default;
 }
 .pp-hbtn {
   justify-self: start;
