@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { FIXED_ROLES, LICENCE_REQUIRED_ROLES, QUAL_LABEL, SHIFT_NAME } from '../constants.js'
-import { timeSlot, todaySlots } from '../lib/roster.js'
+import { byTime, timeSlot, todaySlots } from '../lib/roster.js'
 import { shortName } from '../lib/names.js'
 import { api } from '../api.js'
 import { actions, onDuty, state, toast } from '../store.js'
@@ -9,6 +9,7 @@ import PeoplePicker from './PeoplePicker.vue'
 import StaffCard from './StaffCard.vue'
 
 const filter = ref('every')
+const shiftOpen = ref(false) // the Shift panel that holds the Start–End filters
 const pickRole = ref(null)
 const importOpen = ref(false)
 const impText = ref('')
@@ -41,9 +42,10 @@ const everyone = computed(() => {
       },
   )
 })
-// The API already sorts by actual start time (then end), so people on the same hours sit together.
-const onDutyList = computed(() => everyone.value.filter((e) => e.shift_type))
-// One filter chip per distinct Start–End actually on today's roster, instead of fixed Early/Late/All day.
+// Sorted by actual start time (then end), so people on the same hours sit together.
+const onDutyList = computed(() => everyone.value.filter((e) => e.shift_type).sort(byTime(state.shift)))
+// One filter per distinct Start–End actually on today's roster (inside the Shift panel), instead of
+// fixed Early/Late/All day.
 const slots = computed(() => todaySlots(onDutyList.value))
 const noTimes = computed(() => onDutyList.value.filter((e) => !timeSlot(e)))
 const offDutyList = computed(() => everyone.value.filter((e) => !e.shift_type))
@@ -61,14 +63,25 @@ const groups = computed(() => {
     changed: all.filter(isChanged),
   }
 })
-const chips = computed(() => {
-  const list = [['every', 'Everyone'], ...slots.value.map((s) => ['slot:' + s.label, s.label])]
+const timeChips = computed(() => {
+  const list = slots.value.map((s) => ['slot:' + s.label, s.label])
   if (noTimes.value.length) list.push(['notimes', 'No times'])
-  list.push(['call', 'Call in'], ['sick', 'Sick'])
+  return list
+})
+const otherChips = computed(() => {
+  const list = [['call', 'Call in'], ['sick', 'Sick']]
   if (hasPlan.value) list.push(['changed', 'Changed'])
   return list
 })
-const visible = computed(() => groups.value[chips.value.some((c) => c[0] === filter.value) ? filter.value : 'every'])
+const known = computed(() => ['every', ...timeChips.value.map((c) => c[0]), ...otherChips.value.map((c) => c[0])])
+const current = computed(() => (known.value.includes(filter.value) ? filter.value : 'every'))
+const visible = computed(() => groups.value[current.value])
+// The Shift button shows the chosen time once one is picked, so it's clear while the panel is closed.
+const pickedTime = computed(() => timeChips.value.find((c) => c[0] === current.value))
+function pickTime(key) {
+  filter.value = current.value === key ? 'every' : key
+  shiftOpen.value = false
+}
 
 // ---- fixed roles for the day: actually on duty, not just "has a card" ----
 const holders = (role) => onDuty.value.filter((e) => e.role === role).map((e) => shortName(e.name))
@@ -236,7 +249,24 @@ async function downloadTemplate() {
 
   <h2>On duty today ({{ onDutyList.length }})</h2>
   <div class="chips" role="group" aria-label="Filter">
-    <button v-for="c in chips" :key="c[0]" class="chip" :aria-pressed="filter === c[0]" @click="filter = c[0]">
+    <button class="chip" :aria-pressed="current === 'every'" @click="filter = 'every'">Everyone ({{ groups.every.length }})</button>
+    <button
+      v-if="timeChips.length"
+      class="chip shiftbtn"
+      :aria-pressed="!!pickedTime"
+      :aria-expanded="shiftOpen"
+      aria-controls="shiftPanel"
+      @click="shiftOpen = !shiftOpen"
+    >
+      {{ pickedTime ? `Shift: ${pickedTime[1]} (${groups[pickedTime[0]].length})` : 'Shift' }}
+      <svg viewBox="0 0 24 24" aria-hidden="true" :class="{ up: shiftOpen }"><path d="M6 9l6 6 6-6" /></svg>
+    </button>
+    <button v-for="c in otherChips" :key="c[0]" class="chip" :aria-pressed="current === c[0]" @click="filter = c[0]">
+      {{ c[1] }} ({{ groups[c[0]].length }})
+    </button>
+  </div>
+  <div v-if="shiftOpen && timeChips.length" id="shiftPanel" class="shiftpanel" role="group" aria-label="Filter by shift time">
+    <button v-for="c in timeChips" :key="c[0]" class="chip" :aria-pressed="current === c[0]" @click="pickTime(c[0])">
       {{ c[1] }} ({{ groups[c[0]].length }})
     </button>
   </div>
@@ -342,6 +372,33 @@ async function downloadTemplate() {
 </template>
 
 <style scoped>
+.shiftbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.shiftbtn svg {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.15s;
+}
+.shiftbtn svg.up {
+  transform: rotate(180deg);
+}
+.shiftpanel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--surface);
+}
+.shiftpanel .chip {
+  font-variant-numeric: tabular-nums;
+}
 .rt-lead {
   margin: 0 0 14px;
   font-size: 14px;
