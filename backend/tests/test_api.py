@@ -415,3 +415,28 @@ def test_roster_template_round_trips_through_the_importer(client):
     files = {"file": ("roster.xlsx", buf.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
     preview = client.post("/api/roster/import/preview/file", data={"shift": "morning"}, files=files).json()
     assert preview == {"days": 7, "people": 3, "new_people": 0, "shifts": 2, "bad": []}
+
+
+TIMED = "Name,Tue 13/10,\n,Start,End\nAlex K,08:00,12:50\nPriya S,06:00,11:00\nTom W,06:00,12:50\n"
+
+
+def test_timed_roster_sorts_by_start_and_changes_compare_times(client):
+    assert client.post("/api/roster/import", json={"shift": "morning", "text": TIMED}).status_code == 200
+    roster = client.get("/api/roster", params=Q).json()
+    assert [(e["name"], e["rstart"], e["rend"]) for e in roster["entries"]] == [
+        ("Priya S", "06:00", "11:00"),
+        ("Tom W", "06:00", "12:50"),
+        ("Alex K", "08:00", "12:50"),
+    ]
+    assert not any(e["changed"] for e in roster["entries"])
+    assert roster["entries"][0]["planned_rstart"] == "06:00"
+
+    tom = next(e["staff_id"] for e in roster["entries"] if e["name"] == "Tom W")
+    moved = client.patch(f"/api/roster/{tom}", params=Q, json={"rend": "11:00"}).json()["entry"]
+    assert moved["changed"] is True
+    assert moved["planned_rend"] == "12:50"
+    report = client.get("/api/report", params=Q).json()
+    assert report["roster_changes"] == ["Tom W (06:00-12:50 to 06:00-11:00)"]
+
+    back = client.patch(f"/api/roster/{tom}", params=Q, json={"rend": "12:50"}).json()["entry"]
+    assert back["changed"] is False

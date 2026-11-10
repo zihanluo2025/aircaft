@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { FIXED_ROLES, LICENCE_REQUIRED_ROLES, QUAL_LABEL, SHIFT_LABEL, SHIFT_NAME, SHIFT_ORDER } from '../constants.js'
+import { FIXED_ROLES, LICENCE_REQUIRED_ROLES, QUAL_LABEL, SHIFT_NAME } from '../constants.js'
+import { timeSlot, todaySlots } from '../lib/roster.js'
 import { shortName } from '../lib/names.js'
 import { api } from '../api.js'
 import { actions, onDuty, state, toast } from '../store.js'
@@ -14,7 +15,8 @@ const impText = ref('')
 const impRes = ref(null)
 
 const hasPlan = computed(() => state.roster.has_plan)
-const isChanged = (e) => hasPlan.value && !!e.shift_type && e.planned_type !== e.shift_type
+// Changed = on/off duty or Start/End differs from the imported plan (worked out by the API).
+const isChanged = (e) => hasPlan.value && !!e.shift_type && e.changed
 
 // Everyone on the team, whether or not they have a roster row for today -- someone with no row yet
 // (never imported, or a brand-new hire) gets a placeholder so the same card/edit panel covers them.
@@ -33,23 +35,26 @@ const everyone = computed(() => {
         sick_at: null,
         rstart: '',
         rend: '',
+        planned_rstart: '',
+        planned_rend: '',
+        changed: false,
       },
   )
 })
-// Grouped by shift type (Early, then Late, then All day) so people on the same shift sit together,
-// rather than in whatever order the roster happened to list them.
-const onDutyList = computed(() =>
-  everyone.value.filter((e) => e.shift_type).sort((a, b) => SHIFT_ORDER[a.shift_type] - SHIFT_ORDER[b.shift_type]),
-)
+// The API already sorts by actual start time (then end), so people on the same hours sit together.
+const onDutyList = computed(() => everyone.value.filter((e) => e.shift_type))
+// One filter chip per distinct Start–End actually on today's roster, instead of fixed Early/Late/All day.
+const slots = computed(() => todaySlots(onDutyList.value))
+const noTimes = computed(() => onDutyList.value.filter((e) => !timeSlot(e)))
 const offDutyList = computed(() => everyone.value.filter((e) => !e.shift_type))
 
 const groups = computed(() => {
   const all = onDutyList.value
+  const bySlot = Object.fromEntries(slots.value.map((s) => ['slot:' + s.label, all.filter((e) => timeSlot(e) === s.label)]))
   return {
     every: all,
-    early: all.filter((e) => e.shift_type === 'early'),
-    late: all.filter((e) => e.shift_type === 'late'),
-    all: all.filter((e) => e.shift_type === 'all'),
+    ...bySlot,
+    notimes: noTimes.value,
     call: all.filter((e) => e.called_in_at),
     // calling someone sick takes them off duty, so look across the whole team, not just on duty
     sick: everyone.value.filter((e) => e.sick_at),
@@ -57,14 +62,9 @@ const groups = computed(() => {
   }
 })
 const chips = computed(() => {
-  const list = [
-    ['every', 'Everyone'],
-    ['early', 'Early'],
-    ['late', 'Late'],
-    ['all', 'All day'],
-    ['call', 'Call in'],
-    ['sick', 'Sick'],
-  ]
+  const list = [['every', 'Everyone'], ...slots.value.map((s) => ['slot:' + s.label, s.label])]
+  if (noTimes.value.length) list.push(['notimes', 'No times'])
+  list.push(['call', 'Call in'], ['sick', 'Sick'])
   if (hasPlan.value) list.push(['changed', 'Changed'])
   return list
 })
@@ -97,7 +97,7 @@ const pickOptions = computed(() => {
       id: e.staff_id,
       name: shortName(e.name),
       shiftType: e.shift_type,
-      meta: [SHIFT_LABEL[e.shift_type], e.rstart && e.rend ? `${e.rstart}–${e.rend}` : ''].filter(Boolean).join(' · '),
+      meta: timeSlot(e),
       disabled: !!reason,
       reason,
       section: reason ? 'Not available' : needsLicence ? 'Qualified' : 'On duty',

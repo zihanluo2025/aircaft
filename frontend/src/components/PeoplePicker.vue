@@ -64,7 +64,6 @@ const initials = (name) =>
     .filter((_, i, all) => i === 0 || i === all.length - 1)
     .map((w) => w[0].toUpperCase())
     .join('')
-const SHIFT_TONE = { early: 'var(--early)', late: 'var(--lateS)', all: 'var(--long)' }
 </script>
 
 <template>
@@ -109,7 +108,7 @@ const SHIFT_TONE = { early: 'var(--early)', late: 'var(--lateS)', all: 'var(--lo
             :aria-pressed="selected.has(o.id)"
             @click="toggle(o)"
           >
-            <i class="pp-av" :style="{ '--tone': SHIFT_TONE[o.shiftType] || 'var(--muted)' }">{{ initials(o.name) }}</i>
+            <i class="pp-av" :style="{ '--tone': o.shiftType ? 'var(--early)' : 'var(--muted)' }">{{ initials(o.name) }}</i>
             <span class="pp-who">
               <b>{{ o.name }}</b>
               <small>{{ o.meta }}</small>

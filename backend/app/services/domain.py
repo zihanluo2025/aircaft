@@ -15,7 +15,7 @@ ROLE_ORDER = {"Driver": 0, "Toilet": 1, "Truck": 2}
 # day -- Truck duty also covers just helping load/unload, which anyone on duty can do.
 LICENCE_REQUIRED_ROLES = {"Driver"}
 STATUS_LABEL = {"sched": "Scheduled", "landed": "Landed", "cleaning": "Cleaning", "done": "Done", "cancelled": "Cancelled"}
-SHIFT_ORDER = {"early": 0, "late": 1, "all": 2}
+# Only used for old word-only rosters (Early / Late / All day, no times) -- see roster_label.
 SHIFT_TYPE_LABEL = {"early": "Early", "late": "Late", "all": "All day"}
 # Positions a newly synced flight starts with, in this order. International aircraft are larger.
 INTERNATIONAL_ROLES = [
@@ -149,3 +149,36 @@ def build_flight_out(db: Session, f: Flight, detail: bool = False, live: Optiona
     if detail:
         data["sig_image"] = f.sig_image
     return data
+
+
+def roster_changed(entry: RosterEntry) -> bool:
+    """Whether today differs from the manager's plan: on/off duty, or different Start/End times.
+    Old word-only rosters with no times on either side fall back to comparing the shift word."""
+    planned_on, on = bool(entry.planned_type), bool(entry.shift_type)
+    if planned_on != on:
+        return True
+    if not on:
+        return False
+    planned_times = (entry.planned_rstart or "", entry.planned_rend or "")
+    times = (entry.rstart or "", entry.rend or "")
+    if any(planned_times) or any(times):
+        return planned_times != times
+    return entry.planned_type != entry.shift_type
+
+
+def roster_label(start: str, end: str, shift_type: Optional[str]) -> str:
+    """How a shift reads in the report: its times, or the old shift word when no times were recorded."""
+    if start or end:
+        return f"{start or '--:--'}-{end or '--:--'}"
+    return SHIFT_TYPE_LABEL.get(shift_type or "", "on duty")
+
+
+def roster_sort_key(rstart: str, rend: str, window_start: str, shift_type: Optional[str] = None) -> tuple:
+    """Earliest start first, counted from the shift's own start so a night shift past midnight sorts
+    after the evening; then earliest end. People with no times (old word-only rosters) go last."""
+    if not rstart:
+        return (1, {"early": 0, "late": 1, "all": 2}.get(shift_type or "", 3), 0)
+    begin = to_minutes(window_start)
+    start = (to_minutes(rstart) - begin) % 1440
+    end = (to_minutes(rend) - begin) % 1440 if rend else 1440
+    return (0, start, end)

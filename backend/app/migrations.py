@@ -18,7 +18,16 @@ _NEW_COLUMNS = {
         ("rstart", "VARCHAR(5)", "''"),
         ("rend", "VARCHAR(5)", "''"),
         ("sick_at", "DATETIME", "NULL"),
+        ("planned_rstart", "VARCHAR(5)", "''"),
+        ("planned_rend", "VARCHAR(5)", "''"),
     ],
+}
+
+# Run once, right after the column is added: existing planned rows take today's times as their plan
+# (the best guess available -- the original import isn't stored anywhere else).
+_BACKFILL = {
+    "roster_entries.planned_rstart": "UPDATE roster_entries SET planned_rstart = rstart WHERE planned_type IS NOT NULL",
+    "roster_entries.planned_rend": "UPDATE roster_entries SET planned_rend = rend WHERE planned_type IS NOT NULL",
 }
 
 
@@ -40,4 +49,8 @@ def add_missing_columns(engine: Engine) -> list[str]:
                     resolved = default if default is not None else false_literal
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {sql_type} NOT NULL DEFAULT {resolved}"))
                 added.append(f"{table}.{name}")
+                existing.add(name)
+                backfill = _BACKFILL.get(f"{table}.{name}")
+                if backfill and {"rstart", "rend", "planned_type"} <= existing:
+                    conn.execute(text(backfill))
     return added

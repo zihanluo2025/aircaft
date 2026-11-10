@@ -57,11 +57,15 @@ class RosterEntry(Base):
     role: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)  # Driver | Toilet | Truck, fixed for the day
     called_in_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     sick_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # called in sick, off today
-    # The roster's actual Start / Indicative End for the day, HH:MM, "" when not recorded. shift_type
-    # above is still what drives the Early/Late/All day grouping; these are the source of truth when
-    # they came from an import or a manual correction.
+    # The roster's actual Start / Indicative End for the day, HH:MM, "" when not recorded. These are
+    # the source of truth: the Staff page groups people by them, and "changed" compares them with the
+    # planned times below. shift_type is only kept as the on/off-duty flag (its early/late/all value
+    # is a derived leftover, not shown anywhere).
     rstart: Mapped[str] = mapped_column(String(5), default="")
     rend: Mapped[str] = mapped_column(String(5), default="")
+    # The times as imported from the manager's roster, so a change on the day can be compared and undone.
+    planned_rstart: Mapped[str] = mapped_column(String(5), default="")
+    planned_rend: Mapped[str] = mapped_column(String(5), default="")
 
     staff: Mapped["Staff"] = relationship()
 

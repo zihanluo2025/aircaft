@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onUnmounted, ref } from 'vue'
-import { QUAL_LABEL, QUAL_ROLES, SHIFT_LABEL, SHIFT_TIMES } from '../constants.js'
+import { QUAL_LABEL, QUAL_ROLES } from '../constants.js'
+import { DEFAULT_TIMES, plannedSlot, timeSlot, todaySlots } from '../lib/roster.js'
 import { hhmm } from '../lib/time.js'
 import { actions, state, toast } from '../store.js'
 import TimeField from './TimeField.vue'
@@ -23,27 +24,35 @@ const initials = computed(() => {
 })
 
 const hasPlan = computed(() => state.roster.has_plan)
-const isChanged = computed(() => hasPlan.value && !!e.value.shift_type && e.value.planned_type !== e.value.shift_type)
+// Changed = on/off duty or Start/End differs from the imported plan (worked out by the API).
+const isChanged = computed(() => hasPlan.value && !!e.value.shift_type && !!e.value.changed)
+const planLabel = computed(() => plannedSlot(e.value) || 'on duty')
 const note = computed(() => {
-  if (e.value.sick_at && e.value.planned_type) return `Planned ${SHIFT_LABEL[e.value.planned_type]}, called in sick`
+  if (e.value.sick_at && e.value.planned_type) return `Planned ${planLabel.value}, called in sick`
   if (!isChanged.value) return ''
-  if (e.value.planned_type) return `Planned ${SHIFT_LABEL[e.value.planned_type]}, changed today`
+  if (e.value.planned_type) return `Planned ${planLabel.value}, changed today`
   return e.value.called_in_at ? '' : 'Added today, not on the planned roster'
 })
 
-// Picking a shift for someone off duty is how you call them in to cover -- tag it as a call-in too,
-// since it was not part of the imported plan. The times jump to that type's standard Start/End (the
-// whole point of e.g. All day -> Early is to actually change when they leave); still editable below
-// for a genuinely one-off time.
-const changeShift = (type) => {
-  const [rstart, rend] = SHIFT_TIMES[type] || []
+// Calling someone in to cover: pick one of the Start–End pairs already on today's roster (or the
+// shift's full window if nobody has times yet); still editable below for a one-off time. The API
+// only needs a non-null shift_type to mark them on duty -- it works the rest out from the times.
+const callInSlots = computed(() => {
+  const slots = todaySlots(state.roster.entries)
+  if (slots.length) return slots
+  const times = DEFAULT_TIMES[state.shift]
+  return [{ label: `${times[0]}–${times[1]}`, times }]
+})
+const callIn = ([rstart, rend]) =>
+  actions.rosterPatch(e.value.staff_id, { shift_type: 'all', rstart, rend, called_in: true })
+const backToPlan = () => {
+  const { planned_type, planned_rstart, planned_rend } = e.value
+  if (!planned_type) return actions.rosterPatch(e.value.staff_id, { shift_type: null })
   return actions.rosterPatch(e.value.staff_id, {
-    shift_type: type,
-    ...(rstart ? { rstart, rend } : {}),
-    ...(e.value.shift_type ? {} : { called_in: true }),
+    shift_type: planned_type,
+    ...(planned_rstart && planned_rend ? { rstart: planned_rstart, rend: planned_rend } : {}),
   })
 }
-const backToPlan = () => actions.rosterPatch(e.value.staff_id, { shift_type: e.value.planned_type })
 
 // Tap once to arm, tap again to actually call it in -- a single accidental tap on this icon-only
 // button must not take someone off the roster. Resets itself if left untouched.
@@ -80,7 +89,7 @@ function toggleQual(role) {
 </script>
 
 <template>
-  <div class="sc" :class="[e.shift_type ? 'sh-' + e.shift_type : 'off', { open }]">
+  <div class="sc" :class="[e.shift_type ? 'on' : 'off', { open }]">
     <div class="sc-top">
       <i class="sc-av" aria-hidden="true">{{ initials }}</i>
       <div class="sc-id">
@@ -90,9 +99,8 @@ function toggleQual(role) {
         </div>
         <div class="sc-sub">
           <span class="sc-shift" :class="{ sick: e.sick_at }">
-            <i class="sc-dot" aria-hidden="true"></i>{{ e.shift_type ? SHIFT_LABEL[e.shift_type] : e.sick_at ? 'Sick today' : 'Off today' }}
+            <i class="sc-dot" aria-hidden="true"></i>{{ e.shift_type ? timeSlot(e) || 'On duty' : e.sick_at ? 'Sick today' : 'Off today' }}
           </span>
-          <span v-if="e.rstart || e.rend" class="sc-time">{{ e.rstart || '--:--' }}&ndash;{{ e.rend || '--:--' }}</span>
           <span v-if="e.role" class="sc-badge role">{{ e.role }}</span>
           <span v-if="e.called_in_at" class="sc-badge call">Call in {{ hhmm(e.called_in_at) }}</span>
           <span v-if="isChanged && e.planned_type" class="sc-badge chg">Changed</span>
@@ -129,26 +137,19 @@ function toggleQual(role) {
     </div>
 
     <div v-if="open" class="sc-edit-panel">
-      <div class="sc-sec">{{ e.shift_type ? 'Shift today' : 'Call them in to cover' }}</div>
-      <div class="sc-seg" role="group" :aria-label="'Shift for ' + e.name">
-        <button
-          v-for="(label, key) in SHIFT_LABEL"
-          :key="key"
-          type="button"
-          :class="'sh-' + key"
-          :aria-pressed="e.shift_type === key"
-          @click="changeShift(key)"
-        >
-          {{ label }}
-        </button>
-      </div>
+      <template v-if="!e.shift_type">
+        <div class="sc-sec">Call them in to cover</div>
+        <div class="sc-slots" role="group" :aria-label="'Call in ' + e.name">
+          <button v-for="s in callInSlots" :key="s.label" type="button" @click="callIn(s.times)">{{ s.label }}</button>
+        </div>
+      </template>
       <button v-if="isChanged && e.planned_type" type="button" class="sc-plan" @click="backToPlan">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5M4 9h10a6 6 0 010 12h-3" /></svg>
-        Back to plan: {{ SHIFT_LABEL[e.planned_type] }}
+        Back to plan: {{ planLabel }}
       </button>
 
       <template v-if="e.shift_type">
-        <div class="sc-sec">Times</div>
+        <div class="sc-sec">Times today</div>
         <div class="sc-times">
           <TimeField label="Start" :model-value="e.rstart" @update:model-value="(v) => changeRosterTime('rstart', v)" />
           <TimeField label="Indicative end" :model-value="e.rend" @update:model-value="(v) => changeRosterTime('rend', v)" />
@@ -194,14 +195,8 @@ function toggleQual(role) {
 .sc:only-child {
   border-radius: 13px;
 }
-.sc.sh-early {
+.sc.on {
   --tone: var(--early);
-}
-.sc.sh-late {
-  --tone: var(--lateS);
-}
-.sc.sh-all {
-  --tone: var(--long);
 }
 .sc.open {
   background: color-mix(in srgb, var(--bg) 55%, var(--surface));
@@ -275,6 +270,7 @@ svg {
   align-items: center;
   gap: 6px;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   color: var(--ink);
 }
 .sc.off .sc-shift {
@@ -294,9 +290,6 @@ svg {
 }
 .sc-shift.sick .sc-dot {
   background: var(--warn);
-}
-.sc-time {
-  font-variant-numeric: tabular-nums;
 }
 /* small soft-filled labels, no outlines */
 .sc-badge {
@@ -426,42 +419,27 @@ svg {
   letter-spacing: 0.06em;
   color: var(--muted);
 }
-/* segmented control, iOS style: one track, the chosen shift filled in its colour */
-.sc-seg {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 4px;
-  padding: 4px;
-  border-radius: 12px;
-  background: var(--bg);
-  border: 1px solid var(--line);
+/* call-in choices: one button per Start–End already on today's roster */
+.sc-slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
-.sc-seg button {
+.sc-slots button {
   height: 40px;
-  border: 0;
-  border-radius: 9px;
-  background: none;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg);
   color: var(--ink);
   font: inherit;
   font-size: 15px;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   cursor: pointer;
 }
-.sc-seg button:hover:not([aria-pressed='true']) {
+.sc-slots button:hover {
   background: var(--surface);
-}
-.sc-seg button[aria-pressed='true'] {
-  color: var(--on-shift);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-}
-.sc-seg button[aria-pressed='true'].sh-early {
-  background: var(--early);
-}
-.sc-seg button[aria-pressed='true'].sh-late {
-  background: var(--lateS);
-}
-.sc-seg button[aria-pressed='true'].sh-all {
-  background: var(--long);
 }
 .sc-plan {
   align-self: flex-start;

@@ -24,9 +24,9 @@ Dates are read day first. Shifts are Early, Late, All day (also E, L, A). Off or
 working. Times are HH:MM (also H:MM or HHMM, e.g. 1550). A dedicated Driver/Truck licence column
 counts as held unless the cell is blank or an "off"-style word (no, n, 0, -, ...); a note column
 grants it when the cell's text contains "driver" and/or "truck". In the paired layout, the actual
-Start/Indicative End is kept and Early/Late/All day is a best-effort label derived from it, against the
-shift's configured window -- the times are the source of truth, the label only exists so the existing
-chip filters and sort order keep working.
+Start/Indicative End is kept and is the source of truth -- the Staff page groups people by those times.
+A best-effort Early/Late/All day value is still derived from them for the stored shift_type, which now
+only marks the person as on duty.
 """
 from __future__ import annotations
 

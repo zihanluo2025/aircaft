@@ -2,7 +2,8 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { Icon as VanIcon, showImagePreview } from 'vant'
 import { api } from '../api.js'
-import { FIXED_ROLES, PRESET_ROLES, SHIFT_LABEL, SHIFT_TIMES, STATUS_LABEL } from '../constants.js'
+import { FIXED_ROLES, PRESET_ROLES, STATUS_LABEL } from '../constants.js'
+import { timeSlot } from '../lib/roster.js'
 import { compressImage } from '../lib/image.js'
 import { shortName } from '../lib/names.js'
 import { vFitLine } from '../lib/fitLine.js'
@@ -50,7 +51,7 @@ const notStartedYet = computed(() => {
   const late = new Map()
   if (cur.date !== f.value.work_date || cur.shift !== f.value.shift) return late
   for (const e of onDuty.value) {
-    const start = e.rstart || (f.value.shift === 'night' ? SHIFT_TIMES[e.shift_type]?.[0] : '')
+    const start = e.rstart
     if (start && !hasStarted(start, f.value.shift, cur.minutes)) late.set(e.staff_id, start)
   }
   return late
@@ -77,7 +78,7 @@ function personOptions() {
       e.staff_id,
       e.name,
       e.shift_type,
-      [SHIFT_LABEL[e.shift_type] || 'Off', e.called_in_at ? 'Call in' : null, e.role].filter(Boolean).join(' · '),
+      [timeSlot(e) || 'On duty', e.called_in_at ? 'Call in' : null, e.role].filter(Boolean).join(' · '),
       !!e.role,
     ),
   )

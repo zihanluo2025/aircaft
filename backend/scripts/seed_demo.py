@@ -22,6 +22,11 @@ QUALS = {0: ["Driver", "Truck"], 1: ["Truck"], 2: ["Driver"], 4: ["Truck", "Driv
 ROLES = {0: "Driver", 1: "Toilet", 4: "Truck"}
 CHANGES = {2: "all", 6: "early"}  # moved on the day because of flight changes
 CALL_IN = 7  # not on the plan, phoned in at short notice
+# Start / End for each old shift word, per team -- the Staff page groups people by these times.
+TIMES = {
+    "morning": {"early": ("06:00", "10:30"), "late": ("08:30", "13:00"), "all": ("06:00", "13:00")},
+    "night": {"early": ("15:50", "22:15"), "late": ("19:50", "23:55"), "all": ("15:50", "23:55")},
+}
 
 FLIGHTS = {
     "morning": [
@@ -72,6 +77,10 @@ def seed(db, work_date: date) -> None:
                     planned_type=planned,
                     shift_type=current,
                     role=ROLES.get(index) if current else None,
+                    rstart=TIMES[shift][current][0] if current else "",
+                    rend=TIMES[shift][current][1] if current else "",
+                    planned_rstart=TIMES[shift][planned][0] if planned else "",
+                    planned_rend=TIMES[shift][planned][1] if planned else "",
                     called_in_at=(utcnow() - timedelta(minutes=40)) if index == CALL_IN else None,
                 )
             )

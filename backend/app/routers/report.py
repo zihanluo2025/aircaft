@@ -10,12 +10,13 @@ from ..deps import get_current_user
 from ..models import Assignment, Flight, RosterEntry, Staff
 from ..schemas import ReportFlight, ReportOut, ReportPerson, Shift
 from ..services.domain import (
-    SHIFT_TYPE_LABEL,
     STATUS_LABEL,
     crew_by_role,
     crew_of,
     flight_minutes,
     flight_status,
+    roster_changed,
+    roster_label,
     title_case,
 )
 from ..services.report_export import build_report_workbook
@@ -89,13 +90,13 @@ def _build_report(db: Session, work_date: Date, shift: str) -> ReportOut:
     if has_plan:
         for e, s in sorted(entries, key=lambda r: r[1].name.lower()):
             planned, current = e.planned_type, e.shift_type
-            if planned == current:
+            if not roster_changed(e):
                 continue
             if current and e.called_in_at and not planned:
                 continue  # already listed under Called in
-            changes.append(
-                f"{title_case(s.name)} ({SHIFT_TYPE_LABEL.get(planned, 'not planned')} to {SHIFT_TYPE_LABEL.get(current, 'off')})"
-            )
+            before = roster_label(e.planned_rstart, e.planned_rend, planned) if planned else "not planned"
+            after = roster_label(e.rstart, e.rend, current) if current else "off"
+            changes.append(f"{title_case(s.name)} ({before} to {after})")
 
     summary = build_summary_text(
         date_str=work_date.isoformat(),

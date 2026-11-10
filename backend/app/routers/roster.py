@@ -19,8 +19,8 @@ from ..schemas import (
     RosterPatchOut,
     Shift,
 )
-from ..services.domain import LICENCE_REQUIRED_ROLES, SHIFT_ORDER, title_case
-from ..services.roster_import import QUAL_ROLES, ParsedRoster, parse_roster_text, parse_roster_xlsx
+from ..services.domain import LICENCE_REQUIRED_ROLES, roster_changed, roster_sort_key, title_case
+from ..services.roster_import import QUAL_ROLES, derive_shift_type, ParsedRoster, parse_roster_text, parse_roster_xlsx
 from ..services.roster_template import build_roster_template
 
 router = APIRouter(prefix="/api/roster", tags=["roster"], dependencies=[Depends(get_current_user)])
@@ -44,8 +44,11 @@ def _entry_out(entry: RosterEntry, staff: Staff) -> RosterEntryOut:
         role=entry.role,
         called_in_at=entry.called_in_at,
         sick_at=entry.sick_at,
-        rstart=entry.rstart,
-        rend=entry.rend,
+        rstart=entry.rstart or "",
+        rend=entry.rend or "",
+        planned_rstart=entry.planned_rstart or "",
+        planned_rend=entry.planned_rend or "",
+        changed=roster_changed(entry),
     )
 
 
@@ -60,7 +63,8 @@ def get_roster(
         .join(Staff, Staff.id == RosterEntry.staff_id)
         .where(RosterEntry.work_date == work_date, RosterEntry.shift == shift, Staff.active.is_(True))
     ).all()
-    rows.sort(key=lambda r: (SHIFT_ORDER.get(r[0].shift_type, 3), r[1].name.lower()))
+    window_start = _window(shift)[0]
+    rows.sort(key=lambda r: (roster_sort_key(r[0].rstart, r[0].rend, window_start, r[0].shift_type), r[1].name.lower()))
     return RosterOut(
         date=work_date,
         shift=shift,
@@ -165,6 +169,9 @@ def patch_entry(
         entry.rstart = body.rstart
     if "rend" in fields and body.rend is not None:
         entry.rend = body.rend
+    # The times decide everything now; shift_type just mirrors them (and marks the person on duty).
+    if entry.shift_type and entry.rstart and entry.rend:
+        entry.shift_type = derive_shift_type(entry.rstart, entry.rend, _window(shift))
 
     db.commit()
     return RosterPatchOut(entry=_entry_out(entry, staff), unassigned=unassigned)
@@ -232,6 +239,8 @@ def _apply_parsed(db: Session, parsed: ParsedRoster, shift: str) -> ImportApplyO
                         planned_type=cell["shift"],
                         rstart=cell["rstart"],
                         rend=cell["rend"],
+                        planned_rstart=cell["rstart"],
+                        planned_rend=cell["rend"],
                     )
                 )
                 on_duty.add((work_date, staff.id))

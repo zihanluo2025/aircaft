@@ -1,9 +1,3 @@
-export const SHIFT_LABEL = { early: 'Early', late: 'Late', all: 'All day' }
-export const SHIFT_ORDER = { early: 0, late: 1, all: 2 }
-// Standard Start/Indicative End for each shift type, calibrated from the real roster (matches the
-// thresholds in the backend's derive_shift_type). Switching someone's type jumps their times to
-// these -- still editable afterwards for a genuinely one-off time.
-export const SHIFT_TIMES = { early: ['15:50', '22:15'], late: ['19:50', '23:55'], all: ['15:50', '23:55'] }
 export const SHIFT_NAME = { morning: 'Morning', night: 'Night' }
 export const FIXED_ROLES = ['Driver', 'Toilet', 'Truck']
 // Driver and Truck are both trackable licences (shown/toggled wherever qualifications are listed).

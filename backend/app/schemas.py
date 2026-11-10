@@ -72,6 +72,9 @@ class RosterEntryOut(BaseModel):
     sick_at: Optional[UtcDateTime]
     rstart: str
     rend: str
+    planned_rstart: str
+    planned_rend: str
+    changed: bool
 
 
 class RosterOut(BaseModel):
