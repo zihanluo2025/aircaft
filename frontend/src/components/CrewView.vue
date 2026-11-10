@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { FIXED_ROLES, LICENCE_REQUIRED_ROLES, QUAL_LABEL, SHIFT_NAME } from '../constants.js'
 import { byTime, timeSlot, todaySlots } from '../lib/roster.js'
 import { shortName } from '../lib/names.js'
@@ -8,7 +8,8 @@ import { actions, onDuty, state, toast } from '../store.js'
 import PeoplePicker from './PeoplePicker.vue'
 import StaffCard from './StaffCard.vue'
 
-const filter = ref('every')
+// null = the default: the first (earliest) Start–End on the roster. Tapping Everyone sets 'every'.
+const filter = ref(null)
 const shiftOpen = ref(false) // the Shift panel that holds the Start–End filters
 const pickRole = ref(null)
 const importOpen = ref(false)
@@ -74,7 +75,13 @@ const otherChips = computed(() => {
   return list
 })
 const known = computed(() => ['every', ...timeChips.value.map((c) => c[0]), ...otherChips.value.map((c) => c[0])])
-const current = computed(() => (known.value.includes(filter.value) ? filter.value : 'every'))
+const defaultFilter = computed(() => timeChips.value[0]?.[0] || 'every')
+const current = computed(() => (known.value.includes(filter.value) ? filter.value : defaultFilter.value))
+// A different day or shift starts again on its own earliest time.
+watch(
+  () => [state.date, state.shift],
+  () => (filter.value = null),
+)
 const visible = computed(() => groups.value[current.value])
 // The Shift button shows the chosen time once one is picked, so it's clear while the panel is closed.
 const pickedTime = computed(() => timeChips.value.find((c) => c[0] === current.value))
