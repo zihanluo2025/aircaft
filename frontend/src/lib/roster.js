@@ -35,3 +35,11 @@ export function byTime(shift) {
     return x[0] - y[0] || x[1] - y[1]
   }
 }
+
+// A simple colour per shift time: the day's slots, earliest first, take --slot1, --slot2, ... in turn
+// (wrapping after six). People with no times, or off duty, stay neutral.
+const SLOT_TONES = ['var(--slot1)', 'var(--slot2)', 'var(--slot3)', 'var(--slot4)', 'var(--slot5)', 'var(--slot6)']
+export function slotTones(entries, shift) {
+  const slots = todaySlots([...entries].filter((e) => e.shift_type).sort(byTime(shift)))
+  return new Map(slots.map((s, i) => [s.label, SLOT_TONES[i % SLOT_TONES.length]]))
+}

@@ -3,6 +3,8 @@
   --bg:#EAF1F6; --surface:#FAFCFD; --ink:#10283A; --muted:#556A7A; --line:#C2D1DC;
   --accent:#D44D07; --on-accent:#FFFFFF; --ok:#1B7A5A; --warn:#B3261E; --info:#2B64D0;
   --early:#2B64D0; --lateS:#7A4BC8; --long:#1B7A5A; --on-shift:#FFFFFF;
+  /* one colour per Start–End slot on the day, in start-time order (lib/roster.js SLOT_TONES) */
+  --slot1:#2B64D0; --slot2:#7A4BC8; --slot3:#1B7A5A; --slot4:#B26A00; --slot5:#C2185B; --slot6:#00838F;
   --hdr:#F5B544; --on-hdr:#2A1B05;
   --r:6px;
   --f-body:'Barlow',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
@@ -35,6 +37,7 @@
   --bg:#0B111F; --surface:#141D30; --ink:#E6ECF6; --muted:#93A2BA; --line:#26334B;
   --accent:#4CC9F0; --on-accent:#04202B; --ok:#4CC596; --warn:#FF8A80; --info:#7FA6FF;
   --early:#6F9BFF; --lateS:#B79CFF; --long:#4CC596; --on-shift:#0B111F;
+  --slot1:#6F9BFF; --slot2:#B79CFF; --slot3:#4CC596; --slot4:#F5B544; --slot5:#FF7EB6; --slot6:#4DD0E1;
   --hdr:#1A2750; --on-hdr:#E6ECF6;
 }
 :root[data-shift="night"] .top .date{color-scheme:dark}

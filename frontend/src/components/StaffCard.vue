@@ -3,7 +3,7 @@ import { computed, onUnmounted, ref } from 'vue'
 import { QUAL_LABEL, QUAL_ROLES } from '../constants.js'
 import { DEFAULT_TIMES, plannedSlot, timeSlot, todaySlots } from '../lib/roster.js'
 import { hhmm } from '../lib/time.js'
-import { actions, state, toast } from '../store.js'
+import { actions, state, toast, toneOf } from '../store.js'
 import TimeField from './TimeField.vue'
 
 const props = defineProps({ person: { type: Object, required: true } })
@@ -89,7 +89,7 @@ function toggleQual(role) {
 </script>
 
 <template>
-  <div class="sc" :class="[e.shift_type ? 'on' : 'off', { open }]">
+  <div class="sc" :class="[e.shift_type ? 'on' : 'off', { open }]" :style="toneOf(e) ? { '--tone': toneOf(e) } : null">
     <div class="sc-top">
       <i class="sc-av" aria-hidden="true">{{ initials }}</i>
       <div class="sc-id">

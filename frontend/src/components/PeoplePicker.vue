@@ -6,7 +6,7 @@ import { Popup as VanPopup } from 'vant'
 // aircraft) and the Staff page (who holds a fixed role today). The parent builds the options and
 // decides what Confirm does; this only handles search, sections and selection.
 //
-// option: { id, name, shiftType, meta, section, disabled, reason, note, noteHot }
+// option: { id, name, shiftType, tone, meta, section, disabled, reason, note, noteHot }
 const props = defineProps({
   show: { type: Boolean, default: false },
   title: { type: String, default: '' },
@@ -108,7 +108,7 @@ const initials = (name) =>
             :aria-pressed="selected.has(o.id)"
             @click="toggle(o)"
           >
-            <i class="pp-av" :style="{ '--tone': o.shiftType ? 'var(--early)' : 'var(--muted)' }">{{ initials(o.name) }}</i>
+            <i class="pp-av" :style="{ '--tone': o.tone || (o.shiftType ? 'var(--early)' : 'var(--muted)') }">{{ initials(o.name) }}</i>
             <span class="pp-who">
               <b>{{ o.name }}</b>
               <small>{{ o.meta }}</small>

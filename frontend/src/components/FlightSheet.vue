@@ -8,7 +8,7 @@ import { compressImage } from '../lib/image.js'
 import { shortName } from '../lib/names.js'
 import { vFitLine } from '../lib/fitLine.js'
 import { currentShift, fmtElapsed, hasStarted, hhmm, isoFromLocal } from '../lib/time.js'
-import { actions, onDuty, state, toast } from '../store.js'
+import { actions, onDuty, state, toast, toneOf } from '../store.js'
 import PeoplePicker from './PeoplePicker.vue'
 import SignaturePad from './SignaturePad.vue'
 import TimeField from './TimeField.vue'
@@ -58,6 +58,7 @@ const notStartedYet = computed(() => {
 })
 // One picker row: who, their shift today, and why they can't be picked (or are busy elsewhere).
 function personOption(staffId, name, shiftType, meta, fixed) {
+  const entry = onDuty.value.find((d) => d.staff_id === staffId)
   const other = busy.value.get(staffId)
   const start = notStartedYet.value.get(staffId)
   const here = assignedIds.value.has(staffId)
@@ -65,6 +66,7 @@ function personOption(staffId, name, shiftType, meta, fixed) {
     id: staffId,
     name: shortName(name),
     shiftType,
+    tone: toneOf(entry),
     meta,
     fixed,
     note: other ? (other.status === 'cleaning' ? `Cleaning ${other.no}` : `Also on ${other.no}`) : '',

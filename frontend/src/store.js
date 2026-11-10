@@ -4,6 +4,7 @@ import { computed, reactive } from 'vue'
 import { api, getToken, setToken, setUnauthorizedHandler } from './api.js'
 import { THEME_COLOR } from './constants.js'
 import { todayStr } from './lib/time.js'
+import { slotTones, timeSlot } from './lib/roster.js'
 
 const SHIFT_KEY = 'turnaround.shift'
 
@@ -25,6 +26,9 @@ export const state = reactive({
 
 /** People on the roster who are working today. */
 export const onDuty = computed(() => state.roster.entries.filter((e) => e.shift_type))
+const tones = computed(() => slotTones(state.roster.entries, state.shift))
+/** The colour of someone's shift time today (see lib/roster.js), or '' when they have none. */
+export const toneOf = (e) => (e && e.shift_type && tones.value.get(timeSlot(e))) || ''
 
 export const sheetOpen = computed(
   () => state.openFlightId !== null && state.flights.some((f) => f.id === state.openFlightId),

@@ -4,7 +4,7 @@ import { FIXED_ROLES, LICENCE_REQUIRED_ROLES, QUAL_LABEL, SHIFT_NAME } from '../
 import { byTime, timeSlot, todaySlots } from '../lib/roster.js'
 import { shortName } from '../lib/names.js'
 import { api } from '../api.js'
-import { actions, onDuty, state, toast } from '../store.js'
+import { actions, onDuty, state, toast, toneOf } from '../store.js'
 import PeoplePicker from './PeoplePicker.vue'
 import StaffCard from './StaffCard.vue'
 
@@ -65,7 +65,7 @@ const groups = computed(() => {
   }
 })
 const timeChips = computed(() => {
-  const list = slots.value.map((s) => ['slot:' + s.label, s.label])
+  const list = slots.value.map((s) => ['slot:' + s.label, s.label, toneOf({ shift_type: 'on', rstart: s.times[0], rend: s.times[1] })])
   if (noTimes.value.length) list.push(['notimes', 'No times'])
   return list
 })
@@ -117,6 +117,7 @@ const pickOptions = computed(() => {
       id: e.staff_id,
       name: shortName(e.name),
       shiftType: e.shift_type,
+      tone: toneOf(e),
       meta: timeSlot(e),
       disabled: !!reason,
       reason,
@@ -274,7 +275,7 @@ async function downloadTemplate() {
   </div>
   <div v-if="shiftOpen && timeChips.length" id="shiftPanel" class="shiftpanel" role="group" aria-label="Filter by shift time">
     <button v-for="c in timeChips" :key="c[0]" class="chip" :aria-pressed="current === c[0]" @click="pickTime(c[0])">
-      {{ c[1] }} ({{ groups[c[0]].length }})
+      <i class="slotdot" :style="{ background: c[2] || 'var(--line)' }" aria-hidden="true"></i>{{ c[1] }} ({{ groups[c[0]].length }})
     </button>
   </div>
   <div style="height: 8px"></div>
@@ -404,7 +405,15 @@ async function downloadTemplate() {
   background: var(--surface);
 }
 .shiftpanel .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-variant-numeric: tabular-nums;
+}
+.slotdot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
 }
 .rt-lead {
   margin: 0 0 14px;
