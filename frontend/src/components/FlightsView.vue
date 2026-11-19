@@ -352,7 +352,7 @@ const dataNote = computed(() => {
   min-width: 0;
   min-height: 44px;
   padding: 2px;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: var(--r);
   background: none;
 }
@@ -372,15 +372,23 @@ const dataNote = computed(() => {
 }
 .hour-label {
   padding: 3px 0;
-  border-radius: 6px;
   color: var(--muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
-.arrival-hour[aria-pressed="true"] .bar-track i,
-.arrival-hour[aria-pressed="true"] .hour-label {
+.arrival-hour[aria-pressed="true"] {
+  border-color: var(--info);
+  background: color-mix(in srgb, var(--info) 10%, var(--surface));
+}
+.arrival-hour[aria-pressed="true"] .bar-track {
+  color: var(--ink);
+}
+.arrival-hour[aria-pressed="true"] .bar-track i {
   background: var(--info);
-  color: var(--on-shift);
+}
+.arrival-hour[aria-pressed="true"] .hour-label {
+  color: var(--ink);
+  font-weight: 700;
 }
 .flight-results {
   display: flex;
