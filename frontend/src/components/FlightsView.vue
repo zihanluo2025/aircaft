@@ -143,24 +143,27 @@ const dataNote = computed(() => {
 
 <template>
   <div class="flight-toolbar">
-    <div class="flight-scope" role="group" aria-label="Flight scope">
-      <button type="button" :aria-pressed="scope === 'following'" @click="scope = 'following'">
-        Following <span class="scope-count">{{ following.length }}</span>
-      </button>
-      <button type="button" :aria-pressed="scope === 'all'" @click="scope = 'all'">
-        All flights <span class="scope-count">{{ state.flights.length }}</span>
-      </button>
-    </div>
-    <div class="flight-status-totals" role="group" aria-label="Shift cleaning progress">
-      <button
-        v-for="(flights, status) in statusFlights"
-        :key="status"
-        type="button"
-        :aria-pressed="scope === status"
-        @click="scope = status"
-      >
-        {{ STATUS_LABEL[status] }} <span class="status-total">{{ flights.length }}</span>
-      </button>
+    <div class="flight-views">
+      <div class="flight-view-group" role="group" aria-label="Flight scope">
+        <button type="button" class="chip" :aria-pressed="scope === 'following'" @click="scope = 'following'">
+          Following ({{ following.length }})
+        </button>
+        <button type="button" class="chip" :aria-pressed="scope === 'all'" @click="scope = 'all'">
+          All flights ({{ state.flights.length }})
+        </button>
+      </div>
+      <div class="flight-view-group" role="group" aria-label="Cleaning status">
+        <button
+          v-for="(flights, status) in statusFlights"
+          :key="status"
+          type="button"
+          class="chip"
+          :aria-pressed="scope === status"
+          @click="scope = status"
+        >
+          {{ STATUS_LABEL[status] }} ({{ flights.length }})
+        </button>
+      </div>
     </div>
     <button
       type="button"
@@ -171,20 +174,21 @@ const dataNote = computed(() => {
       {{ state.syncing ? 'Updating...' : 'Update' }}
     </button>
   </div>
-  <p v-if="dataNote" class="flight-sync-note">{{ dataNote }}</p>
+  <p v-if="dataNote" class="note-line flight-sync-note">{{ dataNote }}</p>
 
-  <section v-if="state.flights.length && !activeStatusFlights" class="arrival-filter" aria-labelledby="flight-hour-label">
+  <section v-if="state.flights.length && !activeStatusFlights" class="blk arrival-filter" aria-labelledby="flight-hour-label">
     <div class="arrival-heading">
       <h2 id="flight-hour-label">Arrivals per hour</h2>
-      <div class="group-options" role="group" aria-label="Flight group">
+      <div class="flight-view-group group-options" role="group" aria-label="Flight group">
         <button
           v-for="[key, label] in groups"
           :key="key"
           type="button"
+          class="chip"
           :aria-pressed="groupFilter === key"
           @click="groupFilter = key"
         >
-          {{ label }} <span class="group-count">{{ groupCounts[key] }}</span>
+          {{ label }} ({{ groupCounts[key] }})
         </button>
       </div>
     </div>
@@ -208,8 +212,8 @@ const dataNote = computed(() => {
   </section>
 
   <div v-if="state.flights.length" class="flight-results">
-    <p role="status">{{ resultLabel }}</p>
-    <button v-if="!activeStatusFlights && hasFilters" type="button" class="clear-filters" @click="clearFilters">Clear filters</button>
+    <h2><span role="status">{{ resultLabel }}</span></h2>
+    <button v-if="!activeStatusFlights && hasFilters" type="button" class="ghost" @click="clearFilters">Clear filters</button>
   </div>
 
   <div v-if="!state.flights.length" class="empty">
@@ -268,167 +272,74 @@ const dataNote = computed(() => {
 <style scoped>
 .flight-toolbar {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
+  margin-top: 6px;
 }
-.flight-scope {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  flex: 1 0 min(100%, 188px);
-  gap: 3px;
-  padding: 3px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--line) 32%, var(--bg));
-}
-.flight-scope button {
-  min-height: 44px;
-  padding: 4px 6px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: none;
-  color: var(--muted);
-  font-size: 14px;
-  font-weight: 600;
-}
-.flight-scope button[aria-pressed="true"] {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: var(--bg);
-  font-weight: 700;
-}
-.scope-count {
-  margin-inline-start: 2px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-.flight-scope button[aria-pressed="true"] .scope-count {
-  color: inherit;
-}
-.group-count {
-  min-width: 18px;
-  padding: 1px 3px;
-  border-radius: 5px;
-  background: color-mix(in srgb, currentColor 10%, transparent);
-  font-variant-numeric: tabular-nums;
-  font-size: 12px;
-}
-.flight-status-totals {
+.flight-views {
   display: flex;
-  flex: 1 0 100%;
-  order: 1;
+  flex-wrap: wrap;
   gap: 8px;
-  margin: 0;
-  padding-inline: 2px;
 }
-.flight-status-totals button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 44px;
-  padding: 0 8px;
+.flight-view-group {
+  display: inline-flex;
+  max-width: 100%;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r);
   background: var(--surface);
-  font-size: 13px;
-  font-weight: 600;
 }
-.flight-status-totals button[aria-pressed="true"] {
-  border-color: var(--info);
-  background: color-mix(in srgb, var(--info) 14%, var(--surface));
+.flight-view-group .chip {
+  flex: 1 1 auto;
+  border: 0;
+  border-radius: 0;
 }
-.status-total {
-  display: grid;
-  place-items: center;
-  min-width: 26px;
-  min-height: 24px;
-  margin: 0;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: color-mix(in srgb, currentColor 15%, var(--surface));
-  color: var(--info);
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
+.flight-view-group .chip:first-child {
+  border-radius: var(--r) 0 0 var(--r);
 }
-.flight-status-totals button + button .status-total {
-  color: var(--ok);
+.flight-view-group .chip + .chip {
+  border-inline-start: 1px solid var(--line);
+}
+.flight-view-group .chip:last-child {
+  border-radius: 0 var(--r) var(--r) 0;
+}
+.flight-view-group .chip:focus-visible {
+  z-index: 1;
+}
+.flight-views .chip,
+.group-options .chip {
+  min-height: 44px;
 }
 .flight-update {
   flex: none;
-  min-width: 82px;
-  margin-inline-start: auto;
-  padding-inline: 10px;
-  border-radius: 9px;
-  font-size: 14px;
 }
 .flight-sync-note {
-  margin: 5px 0 0;
-  color: var(--muted);
-  font-size: 12px;
-}
-.arrival-filter h2 {
-  margin: 0;
-  color: var(--muted);
-  font: 600 13px/1.35 var(--f-body);
-}
-.group-options {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(52px, 1fr));
-  gap: 2px;
-  margin-inline-start: auto;
-  padding: 2px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--bg);
-}
-.group-options button,
-.clear-filters {
-  min-height: 44px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--line) 22%, var(--surface));
-  padding: 3px 2px;
-  font-size: 13px;
-  font-weight: 600;
-}
-.group-options button[aria-pressed="true"] {
-  background: var(--ink);
-  color: var(--bg);
-  font-weight: 700;
+  margin-top: 8px;
 }
 .arrival-filter {
   min-width: 0;
-  margin-top: 12px;
-  padding: 8px 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
+  margin: 18px 0 0;
 }
 .arrival-heading {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 4px 8px;
+  gap: 8px;
 }
-.group-options button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  padding-inline: 4px;
-  background: transparent;
-  color: var(--muted);
-  white-space: nowrap;
+.arrival-heading h2 {
+  margin: 0;
+}
+.group-options .chip {
+  padding-inline: 10px;
+  font-size: 14px;
 }
 .arrival-hours {
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: minmax(46px, 1fr);
-  gap: 4px;
-  margin-top: 4px;
+  gap: 8px;
+  margin-top: 8px;
   padding: 4px;
   overflow-x: auto;
 }
@@ -442,7 +353,7 @@ const dataNote = computed(() => {
   min-height: 44px;
   padding: 2px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--r);
   background: none;
 }
 .bar-track {
@@ -473,31 +384,26 @@ const dataNote = computed(() => {
 }
 .flight-results {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  min-height: 44px;
-  margin: 4px 0;
+  margin: 18px 0 8px;
 }
-.flight-results p {
+.flight-results h2 {
   margin: 0;
-  font-size: 14px;
-  font-weight: 600;
 }
-.clear-filters {
-  flex: none;
-  padding-inline: 6px;
-  background: none;
-  color: var(--muted);
+.flight-results .ghost {
+  padding-inline: 8px;
 }
-@media (min-width: 680px) {
-  .flight-scope {
-    flex: 0 1 300px;
+@media (max-width: 400px) {
+  .flight-views {
+    gap: 6px;
   }
-  .flight-status-totals {
-    flex: 0 0 auto;
-    order: 0;
-    margin-inline-start: 8px;
+  .flight-views .chip,
+  .flight-update {
+    padding-inline: 10px;
+    font-size: 14px;
   }
 }
 .follow-button {
@@ -508,7 +414,7 @@ const dataNote = computed(() => {
   padding: 0;
   color: var(--muted);
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--r);
   background: transparent;
 }
 .follow-button:hover {
