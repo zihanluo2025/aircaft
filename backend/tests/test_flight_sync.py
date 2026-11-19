@@ -90,6 +90,47 @@ def test_sync_ignores_flights_outside_the_shift_window(client, fake):
     assert flights(client) == []
 
 
+def test_followed_flight_survives_sync_and_can_be_unfollowed(client, fake, monkeypatch):
+    from app.config import settings
+
+    http = fake([rec("1", "100", origin="NZAA")])
+    assert sync(client).status_code == 200
+    flight = flights(client)[0]
+    assert flight["followed"] is True
+    url = f"/api/flights/{flight['id']}"
+    assert client.patch(url, json={"followed": True}).json()["followed"] is True
+
+    http.scheduled = [rec("1", "100", origin="NZAA", estimated_in="2026-10-13T20:00:00Z")]
+    _clear_throttle(client)
+    assert sync(client).status_code == 200
+    assert flights(client)[0]["followed"] is True
+    assert flights(client)[0]["eta"] == "06:30"
+
+    monkeypatch.setattr(settings, "flight_exclude_airlines", ["JQ"])
+    _clear_throttle(client)
+    assert sync(client).json()["removed"] == 0
+    assert flights(client)[0]["followed"] is True
+
+    assert client.patch(url, json={"followed": False}).json()["followed"] is False
+    assert flights(client)[0]["followed"] is False
+    _clear_throttle(client)
+    assert sync(client).json()["removed"] == 1
+
+
+def test_international_follow_default_can_be_overridden(client, fake):
+    fake([rec("1", "100", origin="NZAA"), rec("2", "200")])
+    assert sync(client).status_code == 200
+    rows = {f["flight_no"]: f for f in flights(client)}
+    assert rows["JQ 100"]["followed"] is True
+    assert rows["JQ 200"]["followed"] is False
+
+    assert client.patch(f"/api/flights/{rows['JQ 100']['id']}", json={"followed": False}).status_code == 200
+    assert client.patch(f"/api/flights/{rows['JQ 200']['id']}", json={"followed": True}).status_code == 200
+    _clear_throttle(client)
+    assert sync(client).status_code == 200
+    assert {f["flight_no"]: f["followed"] for f in flights(client)} == {"JQ 100": False, "JQ 200": True}
+
+
 def test_sync_updates_times_but_never_a_flight_already_cleaning(client, fake):
     http = fake([rec("1", "100"), rec("2", "200", sched="2026-10-13T20:30:00Z")])
     sync(client)

@@ -77,7 +77,11 @@ def sync_shift(
     # Flights already here that the current rules no longer keep (synced before an airline was dropped)
     # go, but only if nobody has touched them -- recorded work is never deleted by a sync.
     for row in list(existing.values()):
-        if not rules.keeps_airline(_airline_of(row.flight_no), bool(row.international)) and _untouched(row):
+        if (
+            not row.manually_followed
+            and not rules.keeps_airline(_airline_of(row.flight_no), bool(row.international))
+            and _untouched(row)
+        ):
             db.delete(row)
             result.removed += 1
 

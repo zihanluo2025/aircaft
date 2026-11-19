@@ -13,13 +13,26 @@ import chinaSouthernLogo from '../assets/airlines/china-southern.svg'
 import fijiLogo from '../assets/airlines/fiji.svg'
 import airNewZealandLogo from '../assets/airlines/air-new-zealand.png'
 
-const filter = ref('all')
-const chips = [
-  ['all', 'All'],
-  ['upcoming', 'Upcoming'],
-  ['cleaning', 'Cleaning'],
-  ['done', 'Done'],
+const scope = ref('following')
+const DEFAULT_GROUP = 'international'
+const groupFilter = ref(DEFAULT_GROUP)
+const hourFilter = ref(null)
+const groups = [
+  ['international', 'Intl'],
+  ['jetstar', 'JQ'],
+  ['virgin', 'VA'],
 ]
+const followSaving = ref(new Set())
+
+async function toggleFollow(flight) {
+  if (followSaving.value.has(flight.id)) return
+  followSaving.value.add(flight.id)
+  try {
+    await actions.patchFlight(flight.id, { followed: !flight.followed })
+  } finally {
+    followSaving.value.delete(flight.id)
+  }
+}
 
 // Airline logo badge, read off the flight number prefix (works even for flights added by
 // hand, which may not have the airline name field filled in).
@@ -42,109 +55,76 @@ function airlineLogo(flightNo) {
   return code ? AIRLINE_LOGO[code] : undefined
 }
 
-// The Flight mix cards (international / Jetstar / Virgin) double as a second filter, on top of
-// the status chips. Clicking an active one again clears it. Mutually exclusive with the hour
-// filter below -- picking one clears the other. Starts on international, the flights the team
-// works most; tap it again to see everything.
-const mixFilter = ref('international')
-// International takes priority: an international Jetstar/Virgin flight counts under
-// "international", not under its airline, so each flight lands in exactly one bucket.
-const MIX_PREDICATES = {
+// International arrivals belong to Intl, including those operated by JQ or VA.
+const GROUP_PREDICATES = {
   international: (f) => f.international,
   jetstar: (f) => !f.international && airlineCode(f.flight_no) === 'JQ',
   virgin: (f) => !f.international && airlineCode(f.flight_no) === 'VA',
 }
-function toggleMix(key) {
-  mixFilter.value = mixFilter.value === key ? null : key
-  hourFilter.value = null // mix and hour filters are mutually exclusive
+const arrivalHour = (f) => (f.eta ? Number(f.eta.slice(0, 2)) : null)
+const hourLabel = (hour, minutes = '00') => `${String(hour).padStart(2, '0')}:${minutes}`
+const following = computed(() => state.flights.filter((f) => f.followed))
+const scopedFlights = computed(() => scope.value === 'following' ? following.value : state.flights)
+const groupedFlights = computed(() => scopedFlights.value.filter(GROUP_PREDICATES[groupFilter.value]))
+
+function matchesHour(flight) {
+  return hourFilter.value === null || arrivalHour(flight) === hourFilter.value
 }
 
-// The Arrivals per hour bars are a third filter: click an hour to see just what lands then.
-const hourFilter = ref(null)
+const statusFlights = computed(() => ({
+  cleaning: state.flights.filter((f) => f.status === 'cleaning'),
+  done: state.flights.filter((f) => f.status === 'done'),
+}))
+const activeStatusFlights = computed(() => statusFlights.value[scope.value])
+const groupCounts = computed(() => {
+  const flights = scopedFlights.value.filter(matchesHour)
+  return Object.fromEntries(groups.map(([key]) => [key, flights.filter(GROUP_PREDICATES[key]).length]))
+})
+const list = computed(() => activeStatusFlights.value ?? groupedFlights.value.filter(matchesHour))
+const hasFilters = computed(() => groupFilter.value !== DEFAULT_GROUP || hourFilter.value !== null)
+const resultLabel = computed(() => {
+  const count = list.value.length
+  if (activeStatusFlights.value) return `${STATUS_LABEL[scope.value]} · ${count} ${count === 1 ? 'flight' : 'flights'}`
+  const selectedHour = hourFilter.value
+  const timeRange = selectedHour === null ? '' : ` · ${hourLabel(selectedHour)}–${hourLabel(selectedHour, '59')}`
+  return `${count} ${count === 1 ? 'flight' : 'flights'}${timeRange}`
+})
+
 function toggleHour(hour) {
   hourFilter.value = hourFilter.value === hour ? null : hour
-  mixFilter.value = null // mix and hour filters are mutually exclusive
 }
 
-// The status chips (All / Upcoming / Cleaning / Done) always count the whole shift, whatever
-// Intl/JQ/VA or hour filter is on. Tapping one clears those other filters, so the list it shows
-// still matches its count.
-const STATUS_PREDICATES = {
-  all: () => true,
-  upcoming: (f) => ['sched', 'landed'].includes(f.status),
-  cleaning: (f) => f.status === 'cleaning',
-  done: (f) => f.status === 'done',
-}
-const list = computed(() => {
-  let items = state.flights.filter(STATUS_PREDICATES[filter.value] || STATUS_PREDICATES.all)
-  if (mixFilter.value) items = items.filter(MIX_PREDICATES[mixFilter.value])
-  if (hourFilter.value !== null) items = items.filter((f) => f.eta && Number(f.eta.slice(0, 2)) === hourFilter.value)
-  return items
-})
-function chipCount(key) {
-  return state.flights.filter(STATUS_PREDICATES[key]).length
-}
-// A chip only looks selected while it alone decides the list.
-function chipPressed(key) {
-  return filter.value === key && !mixFilter.value && hourFilter.value === null
-}
-function selectChip(key) {
-  filter.value = key
-  mixFilter.value = null
+function clearFilters() {
+  groupFilter.value = DEFAULT_GROUP
   hourFilter.value = null
 }
 
-/** Arrivals per hour, so the leading hand can see when aircraft bunch up. The Night chart starts
- * at 15:00 (nobody is cleaning before the first crew starts) and runs past midnight to the end of
- * the shift, so hours are ordered from the chart's start rather than 0-23. */
-const CHART_FROM = { morning: 6, night: 15 }
+// Order populated hours from the shift start so night hours run across midnight.
+const CHART_FROM = { morning: 6, night: 13 }
 const chart = computed(() => {
   const from = CHART_FROM[state.shift] ?? 0
   const offset = (hour) => (hour - from + 24) % 24
-  const shiftLen = state.shift === 'night' ? 15 : 24 // night chart: 15:00 to 05:59
-  const flights = state.flights.filter((f) => f.eta && !f.cancelled && offset(Number(f.eta.slice(0, 2))) < shiftLen)
-  if (!flights.length) return []
-  const byHour = {}
-  for (const f of flights) {
-    const hour = Number(f.eta.slice(0, 2))
-    byHour[hour] = (byHour[hour] || 0) + 1
+  const byHour = new Map()
+  for (const flight of groupedFlights.value) {
+    const hour = arrivalHour(flight)
+    if (hour !== null) byHour.set(hour, (byHour.get(hour) || 0) + 1)
   }
-  const offsets = Object.keys(byHour).map((h) => offset(Number(h)))
-  const lo = Math.min(...offsets)
-  const hi = Math.max(...offsets)
-  const max = Math.max(...Object.values(byHour))
-  const cols = []
-  let peakFound = false
-  for (let o = lo; o <= hi; o++) {
-    const hour = (from + o) % 24
-    const n = byHour[hour] || 0
-    const peak = !peakFound && n > 0 && n === max
-    if (peak) peakFound = true // only the first hour to hit the max is "the" peak, even on a tie
-    cols.push({
+
+  const max = Math.max(0, ...byHour.values())
+  return [...byHour]
+    .sort(([a], [b]) => offset(a) - offset(b))
+    .map(([hour, n]) => ({
       hour,
       n,
-      peak,
-      height: n ? 8 + Math.round((n / max) * 34) : 2,
-      label: `${String(hour).padStart(2, '0')}:00`,
-    })
-  }
-  return cols
+      height: 8 + Math.round((n / max) * 34),
+      label: hourLabel(hour),
+    }))
 })
 
 // Everything except the gate, which the template renders separately so the gate number can be bold.
 function subLead(f) {
   return [f.airline, f.origin && `from ${f.origin}`, f.rego && `Rego ${f.rego}`].filter(Boolean).join(', ')
 }
-
-/** How the shift's arrivals break down by airline / international, cancelled flights excluded. */
-const mix = computed(() => {
-  const flights = state.flights.filter((f) => !f.cancelled)
-  return {
-    international: flights.filter(MIX_PREDICATES.international).length,
-    jetstar: flights.filter(MIX_PREDICATES.jetstar).length,
-    virgin: flights.filter(MIX_PREDICATES.virgin).length,
-  }
-})
 
 /** One line under the toolbar: when flights were last updated, and how much of the quota is used. */
 const dataNote = computed(() => {
@@ -162,77 +142,390 @@ const dataNote = computed(() => {
 </script>
 
 <template>
-  <div class="toolbar">
-    <div class="chips" style="flex: 1; margin: 0; padding: 0">
-      <button v-for="c in chips" :key="c[0]" class="chip" :aria-pressed="chipPressed(c[0])" @click="selectChip(c[0])">
-        {{ c[1] }} ({{ chipCount(c[0]) }})
+  <div class="flight-toolbar">
+    <div class="flight-scope" role="group" aria-label="Flight scope">
+      <button type="button" :aria-pressed="scope === 'following'" @click="scope = 'following'">
+        Following <span class="scope-count">{{ following.length }}</span>
+      </button>
+      <button type="button" :aria-pressed="scope === 'all'" @click="scope = 'all'">
+        All flights <span class="scope-count">{{ state.flights.length }}</span>
+      </button>
+    </div>
+    <div class="flight-status-totals" role="group" aria-label="Shift cleaning progress">
+      <button
+        v-for="(flights, status) in statusFlights"
+        :key="status"
+        type="button"
+        :aria-pressed="scope === status"
+        @click="scope = status"
+      >
+        {{ STATUS_LABEL[status] }} <span class="status-total">{{ flights.length }}</span>
       </button>
     </div>
     <button
-      class="btn2"
+      type="button"
+      class="btn2 flight-update"
       :disabled="state.syncing || (state.flightData && !state.flightData.configured)"
       @click="actions.syncFlights()"
     >
       {{ state.syncing ? 'Updating...' : 'Update' }}
     </button>
   </div>
-  <p v-if="dataNote" class="note-line syncrow">{{ dataNote }}</p>
+  <p v-if="dataNote" class="flight-sync-note">{{ dataNote }}</p>
 
-  <section v-if="chart.length" class="load" aria-label="Arrivals per hour">
-    <div class="loadhead">
-      <h2>Arrivals per hour</h2>
-      <div class="mixpills">
-        <button :aria-pressed="mixFilter === 'international'" @click="toggleMix('international')">{{ mix.international }} Intl</button>
-        <button :aria-pressed="mixFilter === 'jetstar'" @click="toggleMix('jetstar')">{{ mix.jetstar }} JQ</button>
-        <button :aria-pressed="mixFilter === 'virgin'" @click="toggleMix('virgin')">{{ mix.virgin }} VA</button>
+  <section v-if="state.flights.length && !activeStatusFlights" class="arrival-filter" aria-labelledby="flight-hour-label">
+    <div class="arrival-heading">
+      <h2 id="flight-hour-label">Arrivals per hour</h2>
+      <div class="group-options" role="group" aria-label="Flight group">
+        <button
+          v-for="[key, label] in groups"
+          :key="key"
+          type="button"
+          :aria-pressed="groupFilter === key"
+          @click="groupFilter = key"
+        >
+          {{ label }} <span class="group-count">{{ groupCounts[key] }}</span>
+        </button>
       </div>
     </div>
-    <div class="hcs">
+    <div v-if="chart.length" class="arrival-hours">
       <button
         v-for="c in chart"
         :key="c.hour"
-        class="hc"
-        :class="{ peak: c.peak }"
+        class="arrival-hour"
+        type="button"
+        :aria-label="`${c.label}, ${c.n} ${c.n === 1 ? 'flight' : 'flights'}`"
         :aria-pressed="hourFilter === c.hour"
         @click="toggleHour(c.hour)"
       >
-        <b>{{ c.n || '' }}</b>
-        <i :style="{ height: c.height + 'px' }"></i>
-        <span>{{ c.label }}</span>
+        <span class="bar-track" aria-hidden="true">
+          <b>{{ c.n }}</b>
+          <i :style="{ height: c.height + 'px' }"></i>
+        </span>
+        <span class="hour-label">{{ c.label }}</span>
       </button>
     </div>
   </section>
 
+  <div v-if="state.flights.length" class="flight-results">
+    <p role="status">{{ resultLabel }}</p>
+    <button v-if="!activeStatusFlights && hasFilters" type="button" class="clear-filters" @click="clearFilters">Clear filters</button>
+  </div>
+
   <div v-if="!state.flights.length" class="empty">
     <p>No flights for this shift yet. Tap Update to pull the arrivals you cover.</p>
   </div>
-  <div v-else-if="!list.length" class="empty"><p>Nothing in this list.</p></div>
+  <div v-else-if="!list.length" class="empty">
+    <p v-if="scope === 'cleaning'">No flights are being cleaned this shift.</p>
+    <p v-else-if="scope === 'done'">No flights have been completed this shift.</p>
+    <p v-else-if="scope === 'following' && !following.length">No followed flights yet. Open All flights and tap the star on a flight to follow it.</p>
+    <p v-else>No flights match these filters.</p>
+  </div>
   <div v-else class="strips">
-    <button v-for="f in list" :key="f.id" class="strip" :class="'s-' + f.status" @click="actions.openFlight(f.id)">
-      <div class="t">
-        <b>{{ f.eta || '--:--' }}</b>
-        <small v-if="f.delay_minutes" :class="f.delay_minutes > 0 ? 'late' : 'early'">
-          {{ f.delay_minutes > 0 ? '+' : '' }}{{ f.delay_minutes }} min
-        </small>
-      </div>
-      <div class="m">
-        <strong>
-          <span v-if="airlineLogo(f.flight_no)" class="allogo"
-            ><img :src="airlineLogo(f.flight_no)" :alt="f.airline || airlineCode(f.flight_no)"
-          /></span>
-          {{ f.flight_no }}<i v-if="f.international" class="intl">Intl</i>
-        </strong>
-        <span v-if="subLead(f)">{{ subLead(f) }}</span>
-        <span v-else>No details</span>
-      </div>
-      <div class="r">
-        <em>{{ STATUS_LABEL[f.status] }}</em>
-        <small>
-          <span v-if="f.gate" class="gatechip">Gate {{ f.gate }}</span>
-          <template v-if="f.gate && f.minutes !== null">, </template>
-          <template v-if="f.minutes !== null">{{ f.minutes }} min</template>
-        </small>
-      </div>
-    </button>
+    <div v-for="f in list" :key="f.id" class="strip" :class="'s-' + f.status">
+      <button type="button" class="strip-main" @click="actions.openFlight(f.id)">
+        <div class="t">
+          <b>{{ f.eta || '--:--' }}</b>
+          <small v-if="f.delay_minutes" :class="f.delay_minutes > 0 ? 'late' : 'early'">
+            {{ f.delay_minutes > 0 ? '+' : '' }}{{ f.delay_minutes }} min
+          </small>
+        </div>
+        <div class="m">
+          <strong>
+            <span v-if="airlineLogo(f.flight_no)" class="allogo"
+              ><img :src="airlineLogo(f.flight_no)" :alt="f.airline || airlineCode(f.flight_no)"
+            /></span>
+            {{ f.flight_no }}<i v-if="f.international" class="intl">Intl</i>
+          </strong>
+          <span v-if="subLead(f)">{{ subLead(f) }}</span>
+          <span v-else>No details</span>
+        </div>
+        <div class="r">
+          <em>{{ STATUS_LABEL[f.status] }}</em>
+          <small>
+            <span v-if="f.gate" class="gatechip">Gate {{ f.gate }}</span>
+            <template v-if="f.gate && f.minutes !== null">, </template>
+            <template v-if="f.minutes !== null">{{ f.minutes }} min</template>
+          </small>
+        </div>
+      </button>
+      <button
+        type="button"
+        class="follow-button"
+        :aria-label="`Follow flight ${f.flight_no}`"
+        :aria-pressed="!!f.followed"
+        :disabled="followSaving.has(f.id)"
+        @click="toggleFollow(f)"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z" />
+        </svg>
+      </button>
+    </div>
   </div>
 </template>
+
+<style scoped>
+.flight-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.flight-scope {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  flex: 1 0 min(100%, 188px);
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--line) 32%, var(--bg));
+}
+.flight-scope button {
+  min-height: 44px;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+}
+.flight-scope button[aria-pressed="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
+  font-weight: 700;
+}
+.scope-count {
+  margin-inline-start: 2px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.flight-scope button[aria-pressed="true"] .scope-count {
+  color: inherit;
+}
+.group-count {
+  min-width: 18px;
+  padding: 1px 3px;
+  border-radius: 5px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+.flight-status-totals {
+  display: flex;
+  flex: 1 0 100%;
+  order: 1;
+  gap: 8px;
+  margin: 0;
+  padding-inline: 2px;
+}
+.flight-status-totals button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 600;
+}
+.flight-status-totals button[aria-pressed="true"] {
+  border-color: var(--info);
+  background: color-mix(in srgb, var(--info) 14%, var(--surface));
+}
+.status-total {
+  display: grid;
+  place-items: center;
+  min-width: 26px;
+  min-height: 24px;
+  margin: 0;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 15%, var(--surface));
+  color: var(--info);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.flight-status-totals button + button .status-total {
+  color: var(--ok);
+}
+.flight-update {
+  flex: none;
+  min-width: 82px;
+  margin-inline-start: auto;
+  padding-inline: 10px;
+  border-radius: 9px;
+  font-size: 14px;
+}
+.flight-sync-note {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.arrival-filter h2 {
+  margin: 0;
+  color: var(--muted);
+  font: 600 13px/1.35 var(--f-body);
+}
+.group-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(52px, 1fr));
+  gap: 2px;
+  margin-inline-start: auto;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+}
+.group-options button,
+.clear-filters {
+  min-height: 44px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--line) 22%, var(--surface));
+  padding: 3px 2px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.group-options button[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--bg);
+  font-weight: 700;
+}
+.arrival-filter {
+  min-width: 0;
+  margin-top: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.arrival-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+}
+.group-options button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding-inline: 4px;
+  background: transparent;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.arrival-hours {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(46px, 1fr);
+  gap: 4px;
+  margin-top: 4px;
+  padding: 4px;
+  overflow-x: auto;
+}
+.arrival-hour {
+  display: grid;
+  grid-template-rows: 62px auto;
+  align-items: end;
+  justify-items: stretch;
+  gap: 4px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 2px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+}
+.bar-track {
+  display: grid;
+  justify-items: center;
+  align-content: end;
+  gap: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.bar-track i {
+  width: 72%;
+  border-radius: 4px 4px 2px 2px;
+  background: color-mix(in srgb, var(--info) 32%, var(--line));
+}
+.hour-label {
+  padding: 3px 0;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.arrival-hour[aria-pressed="true"] .bar-track i,
+.arrival-hour[aria-pressed="true"] .hour-label {
+  background: var(--info);
+  color: var(--on-shift);
+}
+.flight-results {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+  margin: 4px 0;
+}
+.flight-results p {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.clear-filters {
+  flex: none;
+  padding-inline: 6px;
+  background: none;
+  color: var(--muted);
+}
+@media (min-width: 680px) {
+  .flight-scope {
+    flex: 0 1 300px;
+  }
+  .flight-status-totals {
+    flex: 0 0 auto;
+    order: 0;
+    margin-inline-start: 8px;
+  }
+}
+.follow-button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+  color: var(--muted);
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+}
+.follow-button:hover {
+  background: var(--line);
+}
+.follow-button[aria-pressed="true"] {
+  color: var(--warn);
+}
+.follow-button svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linejoin: round;
+}
+.follow-button[aria-pressed="true"] svg {
+  fill: currentColor;
+}
+</style>

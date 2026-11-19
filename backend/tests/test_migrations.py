@@ -8,10 +8,16 @@ def test_adds_new_flight_columns_to_an_old_database():
     with engine.begin() as conn:
         conn.execute(text("CREATE TABLE flights (id INTEGER PRIMARY KEY, flight_no VARCHAR(20))"))
         conn.execute(text("INSERT INTO flights (flight_no) VALUES ('QF 1')"))
-    assert add_missing_columns(engine) == ["flights.origin", "flights.international"]
-    assert {"origin", "international"} <= {c["name"] for c in inspect(engine).get_columns("flights")}
+    assert add_missing_columns(engine) == [
+        "flights.origin", "flights.international", "flights.followed", "flights.follow_preference",
+    ]
+    assert {"origin", "international", "followed", "follow_preference"} <= {
+        c["name"] for c in inspect(engine).get_columns("flights")
+    }
     with engine.connect() as conn:
-        assert conn.execute(text("SELECT origin, international FROM flights")).one() == ("", 0)
+        assert conn.execute(text("SELECT origin, international, followed, follow_preference FROM flights")).one() == (
+            "", 0, 0, None,
+        )
     assert add_missing_columns(engine) == []  # running again changes nothing
 
 

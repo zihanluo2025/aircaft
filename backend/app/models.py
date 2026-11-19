@@ -85,6 +85,8 @@ class Flight(Base):
     origin: Mapped[str] = mapped_column(String(10), default="")  # ICAO code of the airport it flew from
     international: Mapped[bool] = mapped_column(Boolean, default=False)
     landed: Mapped[bool] = mapped_column(Boolean, default=False)
+    _legacy_followed: Mapped[bool] = mapped_column("followed", Boolean, default=False)
+    follow_preference: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     cancelled: Mapped[bool] = mapped_column(Boolean, default=False)
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
@@ -99,6 +101,22 @@ class Flight(Base):
         back_populates="flight", cascade="all, delete-orphan", order_by="Assignment.position"
     )
     photos: Mapped[list["FlightPhoto"]] = relationship(cascade="all, delete-orphan", order_by="FlightPhoto.id")
+
+    @property
+    def manually_followed(self) -> bool:
+        if self.follow_preference is not None:
+            return self.follow_preference
+        return bool(self._legacy_followed)
+
+    @property
+    def followed(self) -> bool:
+        if self.follow_preference is not None:
+            return self.follow_preference
+        return bool(self._legacy_followed or self.international)
+
+    @followed.setter
+    def followed(self, value: bool) -> None:
+        self.follow_preference = value
 
 
 class Assignment(Base):

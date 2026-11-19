@@ -13,6 +13,8 @@ _NEW_COLUMNS = {
     "flights": [
         ("origin", "VARCHAR(10)", "''"),
         ("international", "BOOLEAN", None),  # boolean default depends on the database
+        ("followed", "BOOLEAN", None),
+        ("follow_preference", "BOOLEAN", "NULL"),
     ],
     "roster_entries": [
         ("rstart", "VARCHAR(5)", "''"),

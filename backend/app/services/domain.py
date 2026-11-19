@@ -133,6 +133,7 @@ def build_flight_out(db: Session, f: Flight, detail: bool = False, live: Optiona
         "eta": f.eta,
         "delay_minutes": to_minutes(f.eta) - to_minutes(f.sched),
         "landed": f.landed,
+        "followed": f.followed,
         "cancelled": f.cancelled,
         "status": flight_status(f),
         "started_at": f.started_at,

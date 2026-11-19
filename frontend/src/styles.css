@@ -107,29 +107,12 @@ h3{font-family:var(--f-disp);font-size:20px;font-weight:600;margin:0 0 10px}
 .chips::-webkit-scrollbar{display:none}
 .chip{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:0 14px;min-height:40px;font-weight:500}
 .chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
-.toolbar{display:flex;gap:10px;align-items:center;justify-content:space-between;margin:2px 0 8px}
-
-/* arrivals per hour */
-.load{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;margin:10px 0 14px}
-.load h2{margin:0 0 6px;font-size:17px}
-.loadhead{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap}
-.loadhead h2{margin:0 0 6px}
-.mixpills{display:flex;gap:6px;margin:0 0 6px}
-.mixpills button{border:1px solid var(--line);background:none;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap}
-.mixpills button[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--bg)}
-.hcs{display:grid;grid-template-columns:repeat(auto-fit,minmax(34px,1fr));gap:6px;align-items:end;overflow-x:auto;padding-bottom:2px}
-.hc{min-width:0;display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:0;padding:0}
-.hc b{font-family:var(--f-disp);font-size:16px;min-height:18px;font-weight:600}
-.hc i{display:block;width:100%;background:var(--line);border-radius:2px 2px 0 0}
-.hc.peak i{background:var(--accent)}
-.hc span{font-size:12px;color:var(--muted);border-radius:999px;padding:1px 7px}
-.hc[aria-pressed="true"] i{background:var(--info)}
-.hc[aria-pressed="true"] b{color:var(--info)}
-.hc[aria-pressed="true"] span{color:var(--on-shift);background:var(--info)}
 
 /* flight strips */
 .strips{display:flex;flex-direction:column;gap:8px}
-.strip{display:grid;grid-template-columns:76px 1fr auto;gap:10px;align-items:center;text-align:left;width:100%;background:var(--surface);border:1px solid var(--line);border-left:6px solid var(--muted);border-radius:var(--r);padding:10px 12px;min-height:72px}
+.strip{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;width:100%;background:var(--surface);border:1px solid var(--line);border-left:6px solid var(--muted);border-radius:var(--r);padding-right:8px;min-height:72px}
+.strip-main{display:grid;grid-template-columns:76px minmax(0,1fr) auto;gap:10px;align-items:center;align-self:stretch;text-align:left;padding:10px 0 10px 12px;border:0;border-radius:var(--r);background:transparent}
+.strip .m{overflow-wrap:anywhere}
 .strip .t b{font-family:var(--f-disp);font-size:30px;line-height:1;font-weight:600;display:block}
 .strip .t small{font-size:13px;font-weight:600}
 .late{color:var(--warn)} .early{color:var(--ok)}
@@ -254,7 +237,6 @@ td.n{font-variant-numeric:tabular-nums}
 /* ---- additions for the Vue version ---- */
 .loading{padding:60px 20px;text-align:center;color:var(--muted)}
 #app{min-height:100vh}
-.syncrow{display:flex;flex-direction:column;align-items:flex-start;gap:6px;margin:0 0 6px}
 .note-line{margin:0;font-size:13px;line-height:1.35;color:var(--muted)}
 .intl{font-style:normal;font-size:12px;font-weight:600;margin-left:8px;padding:1px 7px;border:1px solid var(--accent);border-radius:999px;color:var(--accent);vertical-align:middle}
 .allogo{display:inline-flex;align-items:center;background:#fff;border-radius:4px;padding:3px 6px;vertical-align:middle}
@@ -271,9 +253,10 @@ td.n{font-variant-numeric:tabular-nums}
   .shiftsw button{padding:0 10px;gap:4px}
   main,.sbody{padding-left:10px;padding-right:10px}
   .chips{margin:0 -10px;padding-left:10px;padding-right:10px}
-  .strip{grid-template-columns:58px minmax(0,1fr) auto;gap:8px;padding:10px}
+  .strip{gap:4px;padding-right:4px}
+  .strip-main{grid-template-columns:58px minmax(0,1fr) auto;gap:8px;padding-left:10px}
   .strip .t b{font-size:24px}
-  .strip .m strong{font-size:20px;white-space:nowrap}
+  .strip .m strong{font-size:20px}
   .strip .m span{font-size:13px}
   .strip .r em{font-size:13px}
 }

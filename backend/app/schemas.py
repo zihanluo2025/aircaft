@@ -128,6 +128,7 @@ class FlightPatch(BaseModel):
     sched: Optional[HHMM] = None
     eta: Optional[HHMM] = None
     landed: Optional[bool] = None
+    followed: Optional[bool] = None
     cancelled: Optional[bool] = None
     notes: Optional[Annotated[str, StringConstraints(max_length=4000)]] = None
 
@@ -186,6 +187,7 @@ class FlightOut(BaseModel):
     eta: str
     delay_minutes: int
     landed: bool
+    followed: bool
     cancelled: bool
     status: Literal["sched", "landed", "cleaning", "done", "cancelled"]
     started_at: Optional[UtcDateTime]
